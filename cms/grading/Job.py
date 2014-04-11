@@ -42,6 +42,7 @@ from __future__ import unicode_literals
 import json
 
 from cms.db import File, Manager, Executable, UserTestExecutable, Evaluation
+from cms.grading.scoretypes import get_score_type
 
 
 class Job(object):
@@ -315,7 +316,7 @@ class JobGroup(object):
 
     """
 
-    def __init__(self, jobs=None, success=None):
+    def __init__(self, jobs=None, success=None, parameters=None):
         """Initialization.
 
         jobs ({string: Job}|None): the jobs composing the group, or
@@ -325,7 +326,10 @@ class JobGroup(object):
         """
         if jobs is None:
             jobs = {}
+        if parameters is None:
+            parameters = {}
 
+        self.parameters = parameters
         self.jobs = jobs
         self.success = success
 
@@ -333,6 +337,7 @@ class JobGroup(object):
         res = {
             'jobs': dict((k, v.export_to_dict())
                          for k, v in self.jobs.iteritems()),
+            'parameters': self.parameters,
             'success': self.success,
             }
         return res
@@ -481,7 +486,11 @@ class JobGroup(object):
 
         jobs = {testcase.codename: job}
 
-        return JobGroup(jobs)
+        job_group = JobGroup(jobs)
+        score_type = get_score_type(dataset=dataset)
+        job_group.parameters['score_type_name'] = dataset.score_type
+        job_group.parameters['score_type_data'] = score_type.export_to_dict()
+        return job_group
 
     def to_submission_evaluation(self, sr):
         # Should not invalidate because evaluations will be added one
