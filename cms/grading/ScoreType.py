@@ -32,6 +32,7 @@ task.
 
 import json
 import logging
+import json
 
 from tornado.template import Template
 
@@ -66,6 +67,18 @@ class ScoreType(object):
         # Preload the maximum possible scores.
         self.max_score, self.max_public_score, self.ranking_headers = \
             self.max_scores()
+
+    def export_to_dict(self):
+        res = {
+            'public_testcases': self.public_testcases,
+            'parameters': json.dumps(self.parameters)
+            }
+        return res
+
+    @classmethod
+    def import_from_dict(cls, name, data):
+        class_ = get_score_type_class(name)
+        return class_(data['parameters'], data['public_testcases'])
 
     def get_html_details(self, score_details, translator=None):
         """Return an HTML string representing the score details of a
@@ -118,6 +131,9 @@ class ScoreType(object):
         """
         logger.error("Unimplemented method compute_score.")
         raise NotImplementedError("Please subclass this class.")
+
+    def should_evaluate_testcase(self, testcase_codename, known_outcomes):
+        return True
 
 
 class ScoreTypeAlone(ScoreType):
@@ -359,3 +375,22 @@ class ScoreTypeGroup(ScoreTypeAlone):
         """
         logger.error("Unimplemented method reduce.")
         raise NotImplementedError("Please subclass this class.")
+
+    def is_outcome_already_known(self, known_outcomes, parameter):
+        return False
+
+    def should_evaluate_testcase(self, testcase_codename, known_outcomes):
+        if not known_outcomes:
+            return True
+        indices = sorted(self.public_testcases.keys())
+        testcase_index = indices.index(testcase_codename)
+        tc_start = 0
+        tc_end = 0
+        for st_idx, parameter in enumerate(self.parameters):
+            tc_end = tc_start + parameter[1]
+            if testcase_index >= tc_start and testcase_index < tc_end:
+                return not self.is_outcome_already_known([float(known_outcomes[x]) for x in indices[tc_start:tc_end] if x in known_outcomes], parameter)
+            if tc_start > testcase_index:
+                break;
+            tc_start = tc_end
+        return True

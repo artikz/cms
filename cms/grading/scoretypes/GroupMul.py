@@ -47,3 +47,12 @@ class GroupMul(ScoreTypeGroup):
     def reduce(self, outcomes, parameter):
         """See ScoreTypeGroup."""
         return reduce(lambda x, y: x * y, outcomes)
+
+    def is_outcome_already_known(self, known_outcomes, parameter):
+        if not known_outcomes:
+            return False
+        if len(parameter) < 3 or parameter[2] == 0:
+            return False
+        if min(known_outcomes) <= 0.0:
+            return True
+        return False
