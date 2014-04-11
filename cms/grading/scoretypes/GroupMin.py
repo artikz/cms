@@ -51,3 +51,12 @@ class GroupMin(ScoreTypeGroup):
     def reduce(self, outcomes, unused_parameter):
         """See ScoreTypeGroup."""
         return min(outcomes)
+
+    def is_outcome_already_known(self, known_outcomes, parameter):
+        if not known_outcomes:
+            return False
+        if len(parameter) < 3 or parameter[2] == 0:
+            return False
+        if min(known_outcomes) <= 0.0:
+            return True
+        return False
