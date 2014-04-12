@@ -288,12 +288,15 @@ class ScoreTypeGroup(ScoreTypeAlone):
         ranking_details = []
         tc_start = 0
         tc_end = 0
+        st_scores = []
 
         for st_idx, parameter in enumerate(self.parameters):
             tc_end = tc_start + parameter[1]
             st_score = self.reduce([float(evaluations[idx].outcome)
                                     for idx in indices[tc_start:tc_end]],
+                                   st_scores,
                                    parameter) * parameter[0]
+            st_scores.append(st_score)
             st_public = all(self.public_testcases[idx]
                             for idx in indices[tc_start:tc_end])
             tc_outcomes = dict((
@@ -361,7 +364,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
         logger.error("Unimplemented method get_public_outcome.")
         raise NotImplementedError("Please subclass this class.")
 
-    def reduce(self, unused_outcomes, unused_parameter):
+    def reduce(self, unused_outcomes, unused_subtasks_scores, unused_parameter):
         """Return the score of a subtask given the outcomes.
 
         unused_outcomes ([float]): the outcomes of the submission in
@@ -374,7 +377,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
         logger.error("Unimplemented method reduce.")
         raise NotImplementedError("Please subclass this class.")
 
-    def is_outcome_already_known(self, known_outcomes, parameter):
+    def is_score_already_known(self, known_testcases_outcomes, known_subtasks_scores, parameter):
         return False
 
     def should_evaluate_testcase(self, testcase_codename, known_outcomes):
@@ -384,11 +387,16 @@ class ScoreTypeGroup(ScoreTypeAlone):
         testcase_index = indices.index(testcase_codename)
         tc_start = 0
         tc_end = 0
+        st_scores = []
         for st_idx, parameter in enumerate(self.parameters):
-            tc_end = tc_start + parameter[1]
-            if testcase_index >= tc_start and testcase_index < tc_end:
-                return not self.is_outcome_already_known([float(known_outcomes[x]) for x in indices[tc_start:tc_end] if x in known_outcomes], parameter)
             if tc_start > testcase_index:
                 break;
+            tc_end = tc_start + parameter[1]
+            if testcase_index >= tc_start and testcase_index < tc_end:
+                return not self.is_score_already_known([float(known_outcomes[x]) for x in indices[tc_start:tc_end] if x in known_outcomes], st_scores, parameter)
+            st_score = self.reduce([float(known_outcomes[x])
+                                    for x in indices[tc_start:tc_end] if x in known_outcomes], st_scores,
+                                   parameter) * parameter[0]
+            st_scores.append(st_score)
             tc_start = tc_end
         return True
