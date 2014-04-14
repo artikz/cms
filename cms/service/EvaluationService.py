@@ -1305,6 +1305,7 @@ class EvaluationService(Service):
                               dataset_id=None,
                               user_id=None,
                               task_id=None,
+                              submission_ids=None,
                               level="compilation"):
         """Request to invalidate some computed data.
 
@@ -1326,6 +1327,8 @@ class EvaluationService(Service):
         dataset_id (int): id of the dataset to invalidate, or None.
         user_id (int): id of the user to invalidate, or None.
         task_id (int): id of the task to invalidate, or None.
+        submission_ids (list of ints): ids of submissions to invalidate, or
+                                       None.
         level (string): 'compilation' or 'evaluation'
 
         """
@@ -1343,7 +1346,8 @@ class EvaluationService(Service):
                 self.contest_id
                 if {user_id, task_id, submission_id, dataset_id} == {None}
                 else None,
-                user_id, task_id, submission_id, dataset_id, session)
+                user_id, task_id, submission_id, dataset_id, submission_ids,
+                session)
 
             logger.info("Submission results to invalidate %s for: %d." %
                         (level, len(submission_results)))
