@@ -29,7 +29,8 @@ from cms.db import SessionGen, Contest
 from cms.db.filecacher import FileCacher
 from cms.grading import JobException
 from cms.grading.tasktypes import get_task_type
-from cms.grading.Job import JobGroup
+from cms.grading.scoretypes import get_score_type
+from cms.grading.Job import JobGroup, EvaluationJob
 
 
 logger = logging.getLogger(__name__)
@@ -100,10 +101,19 @@ class Worker(Service):
             try:
                 self._ignore_job = False
 
-                for k, job in job_group.jobs.iteritems():
+                score_type = None
+                if 'score_type_name' in job_group.parameters:
+                    score_type = get_score_type(job_group.parameters['score_type_name'], **job_group.parameters['score_type_data'])
+
+                # Execute jobs in order of their codenames.
+                job_codenames = job_group.jobs.keys()
+                job_codenames.sort()
+                outcomes = {}
+
+                for k in job_codenames:
+                    job = job_group.jobs[k]
                     logger.info("Starting job.",
                                 extra={"operation": job.info})
-
                     job.shard = self.shard
 
                     # FIXME This is actually kind of a workaround...
@@ -119,7 +129,21 @@ class Worker(Service):
                     # that we cannot index by Dataset ID here...).
                     task_type = get_task_type(job.task_type,
                                               job.task_type_parameters)
-                    task_type.execute_job(job, self.file_cacher)
+
+                    should_execute_job = True
+                    if isinstance(job, EvaluationJob) and score_type:
+                        should_execute_job = score_type.should_evaluate_testcase(k, outcomes)
+
+                    if should_execute_job:
+                        task_type.execute_job(job, self.file_cacher)
+                    else:
+                        job.text = ["Was not evaluated because previous test(s) failed"]
+                        job.success = True
+                        job.outcome = "0.0"
+                        job.plus = {"execution_time": 0.0, "execution_memory": 0, "exit_status": "fail", "execution_wall_clock_time": 0.0}
+                        
+                    if isinstance(job, EvaluationJob) and score_type:
+                        outcomes[k] = job.outcome
 
                     logger.info("Finished job.",
                                 extra={"operation": job.info})

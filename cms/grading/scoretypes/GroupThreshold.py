@@ -44,7 +44,7 @@ class GroupThreshold(ScoreTypeGroup):
         else:
             return N_("Not correct")
 
-    def reduce(self, outcomes, parameter):
+    def reduce(self, outcomes, subtasks_scores, parameter):
         """See ScoreTypeGroup."""
         threshold = parameter[2]
         if all(0 <= outcome <= threshold
@@ -52,3 +52,20 @@ class GroupThreshold(ScoreTypeGroup):
             return 1.0
         else:
             return 0.0
+
+    def is_score_already_known(self, known_testcases_outcomes, known_subtasks_scores, parameter):
+        # Check, whether a subtask we depend on is failed.
+        if known_subtasks_scores and len(parameter) >= 5:
+            for i in parameter[4]:
+                if known_subtasks_scores[i - 1] <= 0.0:
+                    return True;
+        # If no dependent subtasks failed, check whether we allowed to skip tests.
+        if len(parameter) < 4 or parameter[3] == 0:
+            return False
+        # If there are no tests ran yet, we must run this one.
+        if not known_testcases_outcomes:
+            return False
+        # If results for some tests are already known, we can try to skip this one.
+        if any(outcome < 0 or outcome > threshold for outcome in known_testcases_outcomes):
+            return True
+        return False
