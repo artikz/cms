@@ -1107,6 +1107,12 @@ class SubmitHandler(BaseHandler):
         self.sql_session.commit()
         self.application.service.evaluation_service.new_submission(
             submission_id=submission.id)
+
+        # automatically apply token for the submission
+        token = Token(self.timestamp, submission=submission)
+        self.sql_session.add(token)
+        self.sql_session.commit()
+
         self.application.service.add_notification(
             self.current_user.username,
             self.timestamp,
