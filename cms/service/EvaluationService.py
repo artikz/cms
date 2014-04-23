@@ -303,7 +303,7 @@ class JobQueue(object):
         """
         return self.length() == 0
 
-    def get_status(self):
+    def get_status(self, limit=None):
         """Returns the content of the queue. Note that the order may
         be not correct, but the first element is the one at the top.
 
@@ -316,6 +316,8 @@ class JobQueue(object):
             ret.append({'job': data[2],
                         'priority': data[0],
                         'timestamp': make_timestamp(data[1])})
+            if limit is not None and len(ret) == limit:
+                break
         return ret
 
 
@@ -842,14 +844,14 @@ class EvaluationService(Service):
         return stats
 
     @rpc_method
-    def queue_status(self):
+    def queue_status(self, limit=None):
         """Returns a list whose elements are the jobs currently in the
         queue (see Queue.get_status).
 
         returns (list): the list with the queued elements.
 
         """
-        return self.queue.get_status()
+        return self.queue.get_status(limit=limit)
 
     @rpc_method
     def workers_status(self):
