@@ -1648,6 +1648,121 @@ class DatasetSubmissionsHandler(BaseHandler):
         self.render("submissionlist.html", **self.r_params)
 
 
+class ContestSubmissionsHandler(BaseHandler):
+    """Shows all submissions for the contest.
+
+    """
+    def get(self, contest_id):
+        self.contest = self.safe_get_item(Contest, contest_id)
+
+        task_ids = [task.id for task in self.contest.tasks if task.id]
+        task_id = self.get_argument("task_id", 0)
+        try:
+            task_id = int(task_id)
+        except:
+            task_id = 0
+        if task_id and task_id in task_ids:
+            task_ids = [task_id]
+
+        usernames = self.get_argument("users", "")
+        usernames = [username.strip() for username in usernames.split(",")]
+        users = self.sql_session.query(User)\
+                                .filter(User.username.in_(usernames))\
+                                .all()
+        user_ids = [user.id for user in users]
+
+        status = self.get_argument("submission_status", 0)
+        try:
+            status = int(status)
+        except:
+            status = 0
+
+        score_comparison = None
+        score = self.get_argument("score", None)
+        if score:
+            score_comparison = "="
+            if score[0:2] == ">=":
+                score_comparison = ">="
+                score = score[2:]
+            elif score[0:2] == "<=":
+                score_comparison = "<="
+                score = score[2:]
+            elif score[0] == ">":
+                score_comparison = ">"
+                score = score[1:]
+            elif score[0] == "<":
+                score_comparison = "<"
+                score = score[1:]
+            elif score[0] == "=":
+                score = score[1:]
+            try:
+                score = float(score)
+            except:
+                score = None
+
+        limit = self.get_argument("limit", 10)
+        try:
+            limit = int(limit)
+        except:
+            limit = 10
+
+        query = self.sql_session \
+                    .query(Submission)\
+                    .filter(Submission.task_id.in_(task_ids))
+        if user_ids:
+            query = query.filter(Submission.user_id.in_(user_ids))
+
+        query = query.options(joinedload(Submission.task))\
+                     .options(joinedload(Submission.user))\
+                     .options(joinedload(Submission.files))\
+                     .options(joinedload(Submission.token))\
+                     .options(joinedload(Submission.results))
+
+        query = query.order_by(Submission.timestamp.desc())
+        if score is None and not status:
+            query = query.limit(limit)
+        submissions = query.all()
+
+        if score is not None or status:
+            filtered = []
+            for submission in submissions:
+                result = submission.get_result()
+                if score and result:
+                    if score_comparison == "=" and result.score == score or \
+                       score_comparison == ">=" and result.score >= score or \
+                       score_comparison == "<=" and result.score <= score or \
+                       score_comparison == ">" and result.score > score or \
+                       score_comparison == "<" and result.score < score:
+                        filtered.append(submission)
+                elif status:
+                    if status == 1 and \
+                       (result is None or
+                        result.compilation_outcome is None) or \
+                       (result is not None and
+                        (status == 2 and
+                         result.compilation_outcome == "fail" or
+                         (result.compilation_outcome == "ok" and
+                          (status == 3 and not result.evaluated() or
+                           status == 4 and result.scored())))):
+                        filtered.append(submission)
+                if len(filtered) >= limit:
+                    break
+            submissions = filtered
+
+        self.r_params = self.render_params()
+        self.r_params["contest"] = self.contest
+        self.r_params["submissions"] = submissions
+        self.r_params["usernames"] = ",".join(usernames)
+        self.r_params["task_id"] = task_id
+        self.r_params["status"] = status
+        if score is not None:
+            self.r_params["score"] = score_comparison + str(score)
+        else:
+            self.r_params["score"] = ""
+        self.r_params["limit"] = limit
+        self.render("contest_submissions.html", **self.r_params)
+
+
 class RankingHandler(BaseHandler):
     """Shows the ranking for a contest.
 
@@ -2036,4 +2151,5 @@ _aws_handlers = [
     (r"/resources/([0-9]+|all)", ResourcesHandler),
     (r"/resources/([0-9]+|all)/([0-9]+)", ResourcesHandler),
     (r"/notifications", NotificationsHandler),
+    (r"/submissions/([0-9]+)", ContestSubmissionsHandler),
 ]

@@ -1,0 +1,226 @@
+{% extends base.html %}
+
+{% block core %}
+{% from cms import plugin_list %}
+{% from cms.grading import format_status_text %}
+{% from cms.grading.scoretypes import get_score_type %}
+{% set current_score_type = None %}
+
+<div class="core_title">
+  <h1><a href="{{ url_root }}/contest/{{ contest.id }}">{{ contest.name }}</a></h1>
+</div>
+
+<h2 id="title_submissions">Contest submissions</h2>
+
+<div id="filter_form">
+  <!-- We use "multipart/form-data" to have Tornado distinguish between missing and empty values. -->
+  <form enctype="multipart/form-data" action="{{ url_root }}/submissions/{{ contest.id }}" method="GET">
+    <table>
+      <tr>
+        <td>Usernames (comma-separated)</td>
+        <td><input type="text" name="users" value="{{ usernames }}"/></td>
+      </tr>
+      <tr>
+        <td>Task</td>
+        <td>
+          <select name="task_id">
+            <option value="0"></option>
+          {% for task in contest.tasks %}
+            <option value="{{ task.id }}" {{ "selected" if task.id == task_id else "" }}>{{ task.name }}</option>
+          {% end %}
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>State</td>
+        <td>
+          <select name="submission_status">
+            <option value="0"></option>
+            <option value="1" {{ "selected" if status == 1 else "" }}>Compiling</option>
+            <option value="2" {{ "selected" if status == 2 else "" }}>Compilation failed</option>
+            <option value="3" {{ "selected" if status == 3 else "" }}>Evaluating</option>
+            <option value="4" {{ "selected" if status == 4 else "" }}>Evaluated</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td>Number of submissions to display</td>
+        <td>
+          <input type="text" name="limit" value="{{ limit }}" />
+        </td>
+      </tr>
+      <tr>
+        <td>Score (examples: >=50, &lt;40, 30)</td>
+        <td><input type="text" name="score" value="{{ score }}" /></td>
+      </tr>
+    </table>
+    <input type="submit" value="Filter"/>
+    <input type="reset" value="Reset" />
+  </form>
+  <div class="hr"></div>
+</div>
+
+<div id="submissions">
+
+  {% if len(submissions) == 0 %}
+  <p>No submissions found.</p>
+
+  {% else %}
+  <table class="bordered">
+    <thead>
+      <tr>
+        <th style="width: 10%">Time</th>
+        <th style="width: 7%">User</th>
+        <th style="width: 7%">Task</th>
+        <th style="width: 35%">Status</th>
+        <th style="width: 15%">Files</th>
+        <th style="width: 8%">Token</th>
+        <th style="width: 18%">Reevaluate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set score_type = dict() %}
+      {% set datasets_submissions = dict() %}
+      {% for s in sorted(submissions, key=lambda s: s.timestamp, reverse=True) %}
+        {% if s.task.active_dataset_id not in datasets_submissions %}
+          {% set datasets_submissions[s.task.active_dataset_id] = [] %}
+        {% end %}
+        {% set datasets_submissions[s.task.active_dataset_id] += [s.id] %}
+        {% if s.task.active_dataset_id not in score_type %}
+          {% try %}
+            {% set score_type[s.task.active_dataset_id] = get_score_type(dataset=s.task.active_dataset) %}
+          {% except %}
+          {% end %}
+        {% end %}
+      <tr>
+        <td><a href="{{ url_root }}/submission/{{ s.id }}/{{ s.task.active_dataset_id }}">{{ str(s.timestamp) }}</a></td>
+        <td><a href="{{ url_root }}/user/{{ s.user.id }}">{{ s.user.username }}</a></td>
+        <td><a href="{{ url_root }}/task/{{ s.task.id }}">{{ s.task.name }}</a></td>
+        <td>
+          {% set sr = s.get_result() %}
+          {% if sr is None or sr.compilation_outcome is None %}
+          Compiling...
+          {% else %}
+          <div id="title_evaluation_{{ s.id }}" class="toggling_off">
+            {% if sr.compilation_outcome == "fail" %}
+            Compilation failed
+            <div  id="evaluation_{{ s.id }}" class="score_details" style="display: none;">
+            {% elif not sr.evaluated() %}
+            Evaluating...
+            <div  id="evaluation_{{ s.id }}" class="score_details" style="display: none;">
+            {% elif sr.scored() %}
+              {% try %}
+                {% set max_score = score_type[s.task.active_dataset_id].max_score %}
+              {% except %}
+                {% set max_score = "[Cannot get score type - see logs]" %}
+              {% end %}
+            Evaluated ({{ sr.score }} / {{ max_score }})
+            <div class="score_details" id="evaluation_{{ s.id }}" style="display: none;">
+              {% try %}
+                {% raw score_type[s.task.active_dataset_id].get_html_details(sr.score_details) %}
+              {% except %}
+              [Cannot get score type - see logs]
+              {% end %}
+            {% else %}
+            Evaluated
+            <div id="evaluation_{{ s.id }}" style="display: none;">
+              {% if sr.evaluated() %}
+              <h3>Testcases</h3>
+              <table class="nested bordered">
+                <thead>
+                  <tr>
+                    <th style="width: 20%">Outcome</th>
+                    <th style="width: 5%"></th>
+                    <th style="width: 75%">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for idx, ev in sorted((ev.codename, ev) for ev in sr.evaluations) %}
+                  <tr>
+                    <td>{{ ev.outcome }}</td>
+                    {% if s.token is not None or ev.testcase.public %}
+                    <td style="align: center;">&bullet;</td>
+                    {% else %}
+                    <td></td>
+                    {% end %}
+                    <td>{{ ev.text }}</td>
+                  </tr>
+                  {% end %}
+                </tbody>
+              </table>
+              {% end %}
+            {% end %}
+              <h3>Compilation output</h3><!-- TODO: trim long outputs and add facility to see raw -->
+              <pre>{% if sr.compilation_text is not None %}{{ format_status_text(sr.compilation_text) }}{% end %}</pre>
+            </div>
+          </div>
+
+          {% end %}
+        </td>
+        <td>
+          {% for filename in [x.filename for x in s.task.submission_format] %}
+            {% if filename in s.files %}
+              {% set real_filename = filename if s.language is None else filename.replace("%l", s.language) %}
+          <a href="javascript:void(0);" onclick="utils.show_file('{{ real_filename }}','{{ url_root }}/submission_file/{{ s.files[filename].id }}')">
+            {{ real_filename }}
+          </a>
+          <br/>
+            {% end %}
+          {% end %}
+        </td>
+        <td>
+          {% if s.token is None %}
+          No
+          {% else %}
+          Yes
+          {% end %}
+        </td>
+        <td>
+          {% set reevaluation_par_name = "submission" %}
+          {% set reevaluation_par_value = s.id %}
+          {% set reevaluation_par_dataset_id = s.task.active_dataset_id %}
+          {% include reevaluation_buttons.html %}
+        </td>
+      </tr>
+      {% end %}
+    </tbody>
+  </table>
+  <div class="hr"></div>
+<button onclick="{% for dataset_id in datasets_submissions %}
+                 cmsrpc_request('{{ url_root }}',
+                 'EvaluationService', 0,
+                 'invalidate_submission',
+                 {'submission_ids': [{{ ",".join(str(x) for x in datasets_submissions[dataset_id]) }}],
+                  'dataset_id': {{ dataset_id }},
+                  'level': 'compilation'},
+                 function(response) { location.href = ''; }
+                 );
+                {% end %}"
+        title="Compilation" >C</button>
+<button onclick="{% for dataset_id in datasets_submissions %}
+                 cmsrpc_request('{{ url_root }}',
+                 'EvaluationService', 0,
+                 'invalidate_submission',
+                 {'submission_ids': [{{ ",".join(str(x) for x in datasets_submissions[dataset_id]) }}],
+                  'dataset_id': {{ dataset_id }},
+                  'level': 'evaluation'},
+                 function(response) { location.href = ''; }
+                  );
+                {% end %}"
+        title="Evaluation" >E</button>
+<button onclick="{% for dataset_id in datasets_submissions %}
+                 cmsrpc_request('{{ url_root }}',
+                 'ScoringService', 0,
+                 'invalidate_submission',
+                 {'submission_ids': [{{ ",".join(str(x) for x in datasets_submissions[dataset_id]) }}],
+                  'dataset_id': {{ dataset_id }}
+                 },
+                 function(response) { location.href = ''; }
+                 );
+                {% end %}"
+        title="Score" >S</button>
+    </div>
+
+  {% end %}
+
+{% end %}

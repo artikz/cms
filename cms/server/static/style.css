@@ -585,7 +585,10 @@ body.admin .notifications .notification_close:hover {
     background-color: #F7CBFE;
 }
 
-
+div#queue_status {
+    height: 400px;
+    overflow-y: scroll;
+}
 
 
 /* HACKS */

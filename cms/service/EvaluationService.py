@@ -303,7 +303,7 @@ class JobQueue(object):
         """
         return self.length() == 0
 
-    def get_status(self):
+    def get_status(self, limit=None):
         """Returns the content of the queue. Note that the order may
         be not correct, but the first element is the one at the top.
 
@@ -316,6 +316,8 @@ class JobQueue(object):
             ret.append({'job': data[2],
                         'priority': data[0],
                         'timestamp': make_timestamp(data[1])})
+            if limit is not None and len(ret) == limit:
+                break
         return ret
 
 
@@ -842,14 +844,14 @@ class EvaluationService(Service):
         return stats
 
     @rpc_method
-    def queue_status(self):
+    def queue_status(self, limit=None):
         """Returns a list whose elements are the jobs currently in the
         queue (see Queue.get_status).
 
         returns (list): the list with the queued elements.
 
         """
-        return self.queue.get_status()
+        return self.queue.get_status(limit=limit)
 
     @rpc_method
     def workers_status(self):
@@ -1309,6 +1311,7 @@ class EvaluationService(Service):
                               dataset_id=None,
                               user_id=None,
                               task_id=None,
+                              submission_ids=None,
                               level="compilation"):
         """Request to invalidate some computed data.
 
@@ -1330,6 +1333,8 @@ class EvaluationService(Service):
         dataset_id (int): id of the dataset to invalidate, or None.
         user_id (int): id of the user to invalidate, or None.
         task_id (int): id of the task to invalidate, or None.
+        submission_ids (list of ints): ids of submissions to invalidate, or
+                                       None.
         level (string): 'compilation' or 'evaluation'
 
         """
@@ -1347,7 +1352,8 @@ class EvaluationService(Service):
                 self.contest_id
                 if {user_id, task_id, submission_id, dataset_id} == {None}
                 else None,
-                user_id, task_id, submission_id, dataset_id, session)
+                user_id, task_id, submission_id, dataset_id, submission_ids,
+                session)
 
             logger.info("Submission results to invalidate %s for: %d." %
                         (level, len(submission_results)))

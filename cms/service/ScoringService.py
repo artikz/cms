@@ -248,7 +248,8 @@ class ScoringService(Service):
 
     @rpc_method
     def invalidate_submission(self, submission_id=None, dataset_id=None,
-                              user_id=None, task_id=None, contest_id=None):
+                              user_id=None, task_id=None, contest_id=None,
+                              submission_ids=None):
         """Invalidate (and re-score) some submission results.
 
         Invalidate the scores of the submission results that:
@@ -269,6 +270,8 @@ class ScoringService(Service):
             invalidated, or None.
         contest_id (int): id of the contest whose results should be
             invalidated, or None.
+        submission_ids (list of int): ids of submissions whose results should
+            be invalidated, or None.
 
         """
         logger.info("Invalidation request received.")
@@ -282,7 +285,7 @@ class ScoringService(Service):
             submission_results = \
                 get_submission_results(contest_id, user_id, task_id,
                                        submission_id, dataset_id,
-                                       session=session)
+                                       submission_ids, session=session)
 
             for sr in submission_results:
                 if sr.scored():
