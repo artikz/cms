@@ -69,7 +69,13 @@ function enable_worker(shard) {
                        "EvaluationService", 0,
                        "enable_worker",
                        {"shard":shard},
-                       function() { update_workers_status(); });
+                       function() {
+                          cmsrpc_request("{{ url_root }}",
+                                         "EvaluationService", 0,
+                                         "workers_status",
+                                         {},
+                                         update_workers_status);
+                       });
     }
 }
 
@@ -79,7 +85,13 @@ function disable_worker(shard) {
                        "EvaluationService", 0,
                        "disable_worker",
                        {"shard":shard},
-                       function() { update_workers_status(); });
+                       function() {
+                          cmsrpc_request("{{ url_root }}",
+                                         "EvaluationService", 0,
+                                         "workers_status",
+                                         {},
+                                         update_workers_status);
+                       });
     }
 }
 
@@ -165,14 +177,6 @@ function update_logs(response)
     table.html(strings.join(""));
 }
 
-function update_workers_status() {
-    cmsrpc_request("{{ url_root }}",
-                   "EvaluationService", 0,
-                   "workers_status",
-                   {},
-                   update_workers_status);
-}
-
 function update_statuses()
 {
 
@@ -188,7 +192,11 @@ function update_statuses()
                    "queue_status",
                    {},
                    update_queue_status);
-    update_workers_status();
+    cmsrpc_request("{{ url_root }}",
+                   "EvaluationService", 0,
+                   "workers_status",
+                   {},
+                   update_workers_status);
     cmsrpc_request("{{ url_root }}",
                    "LogService", 0,
                    "last_messages",
