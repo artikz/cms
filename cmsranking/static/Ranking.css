@@ -385,6 +385,10 @@ abbr {
     width: 48px;
 }
 
+#Scoreboard_cols col.username {
+    width: 80px;
+}
+
 #Scoreboard_cols col.team {
     /* This is the minimum width needed to contain a flag */
     width: 42px;
@@ -436,6 +440,11 @@ abbr {
     text-align: left;
     padding: 0 0.5em;
     cursor: pointer;
+}
+
+#Scoreboard_body tr td.username {
+    text-align: left;
+    padding: 0 0.5em;
 }
 
 #Scoreboard_head tr th.sel {
