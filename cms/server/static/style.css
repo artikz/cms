@@ -586,7 +586,7 @@ body.admin .notifications .notification_close:hover {
 }
 
 div#queue_status {
-    height: 400px;
+    max-height: 400px;
     overflow-y: scroll;
 }
 
