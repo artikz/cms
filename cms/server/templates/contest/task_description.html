@@ -94,10 +94,11 @@
         <col style="width: 60%"/>
     </colgroup>
     <tbody>
-        <tr>
+<!--        <tr>
             <th>{{ _("Type") }}</th>
             <td colspan="2">{% set task_type = get_task_type(dataset=task.active_dataset) %}{{ task_type.name }}</td>
         </tr>
+-->
 {% if task.active_dataset.time_limit is not None %}
         <tr>
             <th>{{ _("Time limit") }}</th>
@@ -137,6 +138,7 @@
 {% end %}
 
 {% if tokens_contest != 0 and tokens_tasks != 0 %}
+<!--
 <tr>
     <th>{{ _("Tokens") }}</th>
     <td colspan="2" class="token_rules">
@@ -166,6 +168,7 @@
     {% end %}
     </td>
 </tr>
+-->
 {% end %}
     </tbody>
 </table>
