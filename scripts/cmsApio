@@ -1,0 +1,179 @@
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+
+# Programming contest management system
+# Copyright © 2013 Luca Wehrstedt <luca.wehrstedt@gmail.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import absolute_import
+from __future__ import print_function
+from __future__ import unicode_literals
+
+import gevent.monkey
+gevent.monkey.patch_all()
+
+import base64
+import json
+import logging
+import os
+import pkg_resources
+import re
+import traceback
+from datetime import datetime, timedelta
+from StringIO import StringIO
+import zipfile
+import md5
+
+from sqlalchemy.orm import joinedload
+from sqlalchemy.exc import IntegrityError
+
+import tornado.web
+import tornado.locale
+
+from cms import config, ServiceCoord, get_service_shards, get_service_address, db
+
+from cms.io import WebService
+from cms.db import Session, Contest, User, Announcement, Question, Message, \
+    Submission, SubmissionResult, File, Task, Dataset, Attachment, Manager, \
+    Testcase, SubmissionFormatElement, Statement
+from cms.db.filecacher import FileCacher
+from cms.grading import compute_changes_for_dataset
+from cms.grading.tasktypes import get_task_type_class
+from cms.grading.scoretypes import get_score_type_class
+from cms.server import file_handler_gen, get_url_root, \
+    CommonRequestHandler
+from cmscommon.datetime import make_datetime, make_timestamp
+from cms.io.PsycoGevent import make_psycopg_green
+
+class MainHandler(tornado.web.RequestHandler):
+    def safe_get_item(self, cls, ident, session=None):
+        if session is None:
+            session = self.sql_session
+        entity = cls.get_from_id(ident, session)
+        if entity is None:
+            raise tornado.web.HTTPError(404)
+        return entity
+
+    def get(self):
+        supervisor = self.get_argument("supervisor", None)
+        if not supervisor:
+            return
+        supervisor = supervisor.lower()
+        self.write("Hello, %s!<br/><br/>" % supervisor)
+
+        self.sql_session = Session()
+        self.sql_session.expire_all()
+
+        f = open("supervisors", "r")
+        s = f.read()
+        f.close()
+        s = json.loads(s)
+        sites = []
+        contestants = {}
+        usernames = []
+        for contestant in s:
+            if contestant[0] == supervisor:
+                site = "%s (%s)" % (contestant[1], contestant[2])
+                if site not in sites:
+                    sites.append(site)
+                    contestants[site] = []
+                contestants[site].append(contestant)
+                usernames.append(contestant[5])
+
+        contest = self.safe_get_item(Contest, 1)
+
+        users = self.sql_session.query(User)\
+                                .filter(User.contest_id == 1 and User.username.in_(usernames))\
+                                .all()
+        users_map = {}
+        for user in users:
+            users_map[user.username] = user
+
+        for site in sites:
+            self.write("Site %s:<br/><br/>" % site)
+            started = True
+            for contestant in contestants[site]:
+                if contestant[5] in users_map:
+                    time = users_map[contestant[5]].starting_time
+                    if not time:
+                        started = False
+                        time = "not started yet"
+                    self.write("%s: %s %s (%s)<br/>" % (contestant[5], contestant[3], contestant[4], time))
+            if not started:
+                self.write("<br/><form action='' method='post'><input type='hidden' name='supervisor' value='%s'/><input type='hidden' name='site' value='%s'/>Password: <input type='password' name='password' value=''/><input type='submit' value='Start!'/></form><br/>" % (supervisor, site))
+            self.write("<br/>")
+        self.sql_session.commit()
+
+    def post(self):
+        supervisor = self.get_argument("supervisor", None)
+        site = self.get_argument("site", None)
+        password = self.get_argument("password", None)
+        if not supervisor or not site or not password:
+            self.redirect("/?supervisor=%s" % supervisor)
+            return
+
+        s = supervisor.lower() + site.lower() + "zoh3fee6oaCh9eengei2"
+        m = md5.new()
+        m.update(s)
+        if m.hexdigest() != password:
+            self.redirect("/?supervisor=%s" % supervisor)
+            return
+
+        self.write("Done!")
+
+        self.sql_session = Session()
+        self.sql_session.expire_all()
+
+        f = open("supervisors", "r")
+        s = f.read()
+        f.close()
+        s = json.loads(s)
+        contestants = []
+        usernames = []
+        for contestant in s:
+            if contestant[0] == supervisor:
+                s = "%s (%s)" % (contestant[1], contestant[2])
+                if site == s:
+                    contestants.append(contestant)
+                    usernames.append(contestant[5])
+
+        contest = self.safe_get_item(Contest, 1)
+
+        users = self.sql_session.query(User)\
+                                .filter(User.contest_id == 1)\
+                                .all()
+        for user in users:
+            if not user.starting_time and user.username in usernames:
+                user.starting_time = datetime.utcnow()
+        self.sql_session.commit()
+        self.redirect("/?supervisor=%s" % supervisor)
+
+    def finish(self, *args, **kwds):
+        try:
+            self.sql_session.close()
+        except:
+            pass
+        try:
+            tornado.web.RequestHandler.finish(self, *args, **kwds)
+        except IOError:
+            logger.debug("Connection closed before our reply.")
+
+
+if __name__ == "__main__":
+    application = tornado.web.Application([
+        (r"/", MainHandler),
+    ])
+    application.listen(8000)
+    tornado.ioloop.IOLoop.instance().start()

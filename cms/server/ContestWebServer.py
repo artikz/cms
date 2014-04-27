@@ -524,11 +524,11 @@ class StartHandler(BaseHandler):
     @tornado.web.authenticated
     @actual_phase_required(-1)
     def post(self):
-        user = self.get_current_user()
+        # user = self.get_current_user()
 
-        logger.info("Starting now for user %s" % user.username)
-        user.starting_time = self.timestamp
-        self.sql_session.commit()
+        # logger.info("Starting now for user %s" % user.username)
+        # user.starting_time = self.timestamp
+        # self.sql_session.commit()
 
         self.redirect("/")
 
