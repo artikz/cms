@@ -851,41 +851,108 @@ class EvaluationService(Service):
         return (dict): statistics on the submissions.
 
         """
-        stats = {
-            "scored": 0,
-            "evaluated": 0,
-            "compilation_fail": 0,
-            "compiling": 0,
-            "evaluating": 0,
-            "max_compilations": 0,
-            "max_evaluations": 0,
-            "invalid": 0}
+
+        queries = {
+            "scored":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    compilation_outcome = 'ok' and \
+                    not(evaluation_outcome is null) and \
+                    not(score is null) and \
+                    not(score_details is null) and \
+                    not(public_score is null) \
+                    and not (public_score_details is null) and \
+                    not(ranking_score_details is null) \
+                    and t.contest_id = :contest_id",
+            "compiling":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    (compilation_outcome != 'fail' and \
+                        compilation_outcome != 'ok' or \
+                        compilation_outcome is null) and \
+                    compilation_tries < %d and \
+                    t.contest_id = :contest_id" %
+            EvaluationService.MAX_COMPILATION_TRIES,
+            "max_compilations":
+            "select count(1) as cnt from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    (compilation_outcome != 'fail' or \
+                        compilation_outcome is null) and \
+                    compilation_tries >= %d and \
+                    t.contest_id = :contest_id" %
+            EvaluationService.MAX_COMPILATION_TRIES,
+            "compilation_fail":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    compilation_outcome = 'fail' and \
+                    t.contest_id = :contest_id",
+            "evaluating":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    compilation_outcome = 'ok' and \
+                    evaluation_outcome is null \
+                    and evaluation_tries < %d and \
+                    t.contest_id = :contest_id" %
+            EvaluationService.MAX_EVALUATION_TRIES,
+            "max_evaluations":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    compilation_outcome = 'ok' and \
+                    evaluation_outcome is null \
+                    and evaluation_tries >= %d and \
+                    t.contest_id = :contest_id" %
+            EvaluationService.MAX_EVALUATION_TRIES,
+            "evaluated":
+            "select count(1) as cnt \
+                from submission_results sr \
+                join submissions s on sr.submission_id = s.id \
+                join tasks t on s.task_id = t.id \
+                where \
+                    compilation_outcome = 'ok' and \
+                    not(evaluation_outcome is null) \
+                    and (score is null or \
+                        score_details is null or \
+                        public_score is null \
+                        or public_score_details is null \
+                        or ranking_score_details is null) \
+                    and t.contest_id = :contest_id",
+            "total":
+            "select count(1) as cnt from submissions s \
+                join tasks t on s.task_id = t.id \
+                where t.contest_id = :contest_id"}
+
+        stats = {}
         with SessionGen() as session:
-            contest = Contest.get_from_id(self.contest_id, session)
-            for submission_result in contest.get_submission_results():
-                if submission_result.compilation_failed():
-                    stats["compilation_fail"] += 1
-                elif not submission_result.compiled():
-                    if submission_result.compilation_tries >= \
-                            EvaluationService.MAX_COMPILATION_TRIES:
-                        stats["max_compilations"] += 1
-                    else:
-                        stats["compiling"] += 1
-                elif submission_result.compilation_succeeded():
-                    if submission_result.evaluated():
-                        if submission_result.scored():
-                            stats["scored"] += 1
-                        else:
-                            stats["evaluated"] += 1
-                    else:
-                        if submission_result.evaluation_tries >= \
-                                EvaluationService.MAX_EVALUATION_TRIES:
-                            stats["max_evaluations"] += 1
-                        else:
-                            stats["evaluating"] += 1
-                else:
-                    # Should not happen.
-                    stats["invalid"] += 1
+            total = 0
+            keys = queries.keys()
+            query = " union all ".join(queries.values())
+            cnt = session.query("cnt") \
+                .from_statement(query) \
+                .params(contest_id=self.contest_id) \
+                .all()
+            for i in xrange(len(keys)):
+                stats[keys[i]] = cnt[i][0]
+                if keys[i] != "total":
+                    total += cnt[i][0]
+            stats["invalid"] = stats["total"] - total
+
         return stats
 
     @rpc_method
