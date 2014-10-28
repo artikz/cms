@@ -27,7 +27,7 @@ from __future__ import unicode_literals
 import logging
 
 from cms import LANGUAGES, LANGUAGE_TO_SOURCE_EXT_MAP, \
-    LANGUAGE_TO_HEADER_EXT_MAP, LANGUAGE_TO_OBJ_EXT_MAP
+    LANGUAGE_TO_HEADER_EXT_MAP, LANG_JAVA, LANGUAGE_TO_OBJ_EXT_MAP
 from cms.grading import get_compilation_commands, get_evaluation_commands, \
     compilation_step, evaluation_step, human_evaluation_message, \
     is_evaluation_passed, extract_outcome_and_text, white_diff_step
@@ -114,13 +114,15 @@ class Batch(TaskType):
             source_filenames = []
             # If a grader is specified, we add to the command line (and to
             # the files to get) the corresponding manager.
-            if self.parameters[0] == "grader":
+            with_grader = self.parameters[0] == "grader"
+            if with_grader:
                 source_filenames.append("grader%s" % source_ext)
             source_filenames.append(format_filename.replace(".%l", source_ext))
             executable_filename = format_filename.replace(".%l", "")
             commands = get_compilation_commands(language,
                                                 source_filenames,
-                                                executable_filename)
+                                                executable_filename,
+                                                with_grader=with_grader)
             res[language] = commands
         return res
 
@@ -220,10 +222,14 @@ class Batch(TaskType):
         # Create the sandbox
         sandbox = create_sandbox(file_cacher)
 
+        if job.language == LANG_JAVA:
+            sandbox.max_processes = None
+
         # Prepare the execution
         executable_filename = job.executables.keys()[0]
         language = job.language
-        commands = get_evaluation_commands(language, executable_filename)
+        commands = get_evaluation_commands(language, executable_filename,
+            with_grader=self.parameters[0] == "grader")
         executables_to_get = {
             executable_filename:
             job.executables[executable_filename].digest
@@ -257,6 +263,7 @@ class Batch(TaskType):
             job.time_limit,
             job.memory_limit,
             writable_files=files_allowing_write,
+            allow_dirs=("/etc/alternatives", ),
             stdin_redirect=stdin_redirect,
             stdout_redirect=stdout_redirect)
 
