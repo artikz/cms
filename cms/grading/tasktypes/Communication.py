@@ -219,12 +219,15 @@ class Communication(TaskType):
         # Second step: we start the user submission compiled with the
         # stub.
         executable_filename = job.executables.keys()[0]
-        command = ["./%s" % executable_filename, fifo_out, fifo_in]
+        if job.language == LANG_JAVA:
+            command = ["/usr/bin/java", "-jar", executable_filename, fifo_out, fifo_in]
+        else:
+            command = ["./%s" % executable_filename, fifo_out, fifo_in]
         executables_to_get = {
             executable_filename:
             job.executables[executable_filename].digest
             }
-        user_allow_dirs = [fifo_dir]
+        user_allow_dirs = [fifo_dir, "/etc/alternatives"]
         for filename, digest in executables_to_get.iteritems():
             sandbox_user.create_file_from_storage(
                 filename, digest, executable=True)

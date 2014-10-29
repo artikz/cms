@@ -165,10 +165,15 @@ class Batch(TaskType):
         source_filenames.append(format_filename.replace(".%l", source_ext))
         files_to_get[source_filenames[0]] = \
             job.files[format_filename].digest
+
+        with_grader = False
+        if self.parameters[0] == "grader":
+            with_grader = True
+
         # If a grader is specified, we add to the command line (and to
         # the files to get) the corresponding manager. The grader must
         # be the first file in source_filenames.
-        if self.parameters[0] == "grader":
+        if with_grader:
             source_filenames.insert(0, "grader%s" % source_ext)
             files_to_get["grader%s" % source_ext] = \
                 job.managers["grader%s" % source_ext].digest
@@ -195,7 +200,8 @@ class Batch(TaskType):
         executable_filename = format_filename.replace(".%l", "")
         commands = get_compilation_commands(language,
                                             source_filenames,
-                                            executable_filename)
+                                            executable_filename,
+                                            with_grader=with_grader)
 
         # Run the compilation
         operation_success, compilation_success, text, plus = \

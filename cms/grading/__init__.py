@@ -137,10 +137,15 @@ def get_compilation_commands(language, source_filenames, executable_filename,
         commands.append(command)
     elif language == LANG_JAVA:
         class_name = os.path.splitext(source_filenames[0])[0]
+        # if not with_grader:
+        prepare_guard_command = ["/bin/bash", "-c", "cat /etc/guard.java  | sed s/%%SOLUTION_CLASS%%/%s/ > guard.java" % (class_name, )]
+        source_filenames.append("guard.java")
+        commands.append(prepare_guard_command)
+
         command = ["/usr/bin/javac"] + source_filenames
-        executable_class_name = class_name
-        if with_grader:
-            executable_class_name = "grader"
+        executable_class_name = "guard"
+        # if with_grader:
+        #     executable_class_name = "grader"
         jar_command = ["/bin/bash", "-c", "/usr/bin/jar cfe %s.jar %s *.class" %
             (class_name, executable_class_name)]
         mv_command = ["/bin/mv", "%s.jar" % class_name, executable_filename]
