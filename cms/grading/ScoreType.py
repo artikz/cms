@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+ #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
 # Contest Management System - http://cms-dev.github.io/
@@ -67,6 +67,8 @@ class ScoreType(object):
         """
         self.parameters = parameters
         self.public_testcases = public_testcases
+
+        self.prepare_parameters()
 
         # Preload the maximum possible scores.
         self.max_score, self.max_public_score, self.ranking_headers = \
@@ -139,6 +141,9 @@ class ScoreType(object):
 
     def should_evaluate_testcase(self, testcase_codename, known_outcomes):
         return True
+
+    def prepare_parameters(self):
+        pass
 
 
 class ScoreTypeAlone(ScoreType):
@@ -260,13 +265,11 @@ class ScoreTypeGroup(ScoreTypeAlone):
         current = 0
 
         for i, parameter in enumerate(self.parameters):
-            next_ = current + parameter[1]
-            score += parameter[0]
+            score += parameter["points"]
             if all(self.public_testcases[idx]
-                   for idx in indices[current:next_]):
-                public_score += parameter[0]
-            headers += ["Subtask %d (%g)" % (i + 1, parameter[0])]
-            current = next_
+                   for idx in self.subtask_testcases[i]):
+                public_score += parameter["points"]
+            headers += ["Subtask %d (%g)" % (i + 1, parameter["points"])]
 
         return score, public_score, headers
 
@@ -284,28 +287,25 @@ class ScoreTypeGroup(ScoreTypeAlone):
         subtasks = []
         public_subtasks = []
         ranking_details = []
-        tc_start = 0
-        tc_end = 0
         st_scores = []
 
         for st_idx, parameter in enumerate(self.parameters):
-            tc_end = tc_start + parameter[1]
             st_score = self.reduce([float(evaluations[idx].outcome)
-                                    for idx in indices[tc_start:tc_end]],
+                                    for idx in self.subtask_testcases[st_idx]],
                                    st_scores,
-                                   parameter) * parameter[0]
+                                   parameter) * parameter["points"]
             st_scores.append(st_score)
             st_public = all(self.public_testcases[idx]
-                            for idx in indices[tc_start:tc_end])
+                            for idx in self.subtask_testcases[st_idx])
             tc_outcomes = dict((
                 idx,
                 self.get_public_outcome(
                     float(evaluations[idx].outcome), parameter)
-                ) for idx in indices[tc_start:tc_end])
+                ) for idx in self.subtask_testcases[st_idx])
 
             testcases = []
             public_testcases = []
-            for idx in indices[tc_start:tc_end]:
+            for idx in self.subtask_testcases[st_idx]:
                 testcases.append({
                     "idx": idx,
                     "outcome": tc_outcomes[idx],
@@ -320,7 +320,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
             subtasks.append({
                 "idx": st_idx + 1,
                 "score": st_score,
-                "max_score": parameter[0],
+                "max_score": parameter["points"],
                 "testcases": testcases,
                 })
             if st_public:
@@ -332,8 +332,6 @@ class ScoreTypeGroup(ScoreTypeAlone):
                     })
 
             ranking_details.append("%g" % round(st_score, 2))
-
-            tc_start = tc_end
 
         score = sum(st["score"] for st in subtasks)
         public_score = sum(st["score"]
@@ -378,26 +376,37 @@ class ScoreTypeGroup(ScoreTypeAlone):
     def is_score_already_known(self, known_testcases_outcomes, known_subtasks_scores, parameter):
         return False
 
+    def prepare_parameters(self):
+        self.subtask_testcases = []
+        indices = sorted(self.public_testcases.keys())
+        for st_idx, parameter in enumerate(self.parameters):
+            testcases = set()
+            for tc in parameter["testcases"]:
+                if isinstance(tc, int):
+                    testcases.add(indices[tc - 1])
+                else:
+                    for tc_idx in xrange(tc[0], tc[1] + 1):
+                        testcases.add(indices[tc_idx - 1])
+            self.subtask_testcases.append(testcases)
+
     def should_evaluate_testcase(self, testcase_codename, known_outcomes):
         if not known_outcomes:
             return True
-        indices = sorted(self.public_testcases.keys())
-        testcase_index = indices.index(testcase_codename)
-        tc_start = 0
-        tc_end = 0
+
         st_scores = []
         for st_idx, parameter in enumerate(self.parameters):
-            if tc_start > testcase_index:
-                break;
-            tc_end = tc_start + parameter[1]
-            if testcase_index >= tc_start and testcase_index < tc_end:
-                return not self.is_score_already_known([float(known_outcomes[x]) for x in indices[tc_start:tc_end] if x in known_outcomes], st_scores, parameter)
+            if testcase_codename in self.subtask_testcases[st_idx]:
+                if not self.is_score_already_known([float(known_outcomes[x])
+                                                    for x in self.subtask_testcases[st_idx]
+                                                    if x in known_outcomes],
+                                                   st_scores, parameter):
+                    return True
             st_score = self.reduce([float(known_outcomes[x])
-                                    for x in indices[tc_start:tc_end] if x in known_outcomes], st_scores,
-                                   parameter) * parameter[0]
+                                    for x in self.subtask_testcases[st_idx]
+                                    if x in known_outcomes], st_scores,
+                                   parameter) * parameter["points"]
             st_scores.append(st_score)
-            tc_start = tc_end
-        return True
+        return False
 
     def get_testcases_to_skip(self, known_outcomes):
         testcases_to_skip = []
