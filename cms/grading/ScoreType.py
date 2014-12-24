@@ -398,3 +398,11 @@ class ScoreTypeGroup(ScoreTypeAlone):
             st_scores.append(st_score)
             tc_start = tc_end
         return True
+
+    def get_testcases_to_skip(self, known_outcomes):
+        testcases_to_skip = []
+        for testcase_codename in sorted(self.public_testcases.keys()):
+            if testcase_codename not in known_outcomes:
+                if not self.should_evaluate_testcase(testcase_codename, known_outcomes):
+                    testcases_to_skip.append(testcase_codename)
+        return testcases_to_skip

@@ -53,7 +53,9 @@ class GroupMul(ScoreTypeGroup):
         if subtasks_scores and len(parameter) >= 4:
             for i in parameter[3]:
                 if subtasks_scores[i - 1] <= 0.0:
-                    return 0;
+                    return 0
+        if not outcomes:
+            return 0
         return reduce(lambda x, y: x * y, outcomes)
 
     def is_score_already_known(self, known_testcases_outcomes, known_subtasks_scores, parameter):
