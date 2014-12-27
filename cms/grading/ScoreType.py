@@ -147,6 +147,9 @@ class ScoreType(object):
     def prepare_parameters(self):
         pass
 
+    def get_testcases_to_skip(self, known_outcomes):
+        return []
+
 
 class ScoreTypeAlone(ScoreType):
     """Intermediate class to manage tasks where the score of a
