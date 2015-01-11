@@ -120,7 +120,7 @@
 {% if compilation_commands is not None %}
 {% set compilation_commands = {lang: compilation_commands[lang] for lang in contest.languages} %}
 <tr>
-    <th rowspan="{{ len(compilation_commands) }}">{{ _("Compilation commands") }}</th>
+    <th rowspan="{{ len(compilation_commands) }}">{{ _("Compilation / evaluation commands") }}</th>
     {% for i, (l, c) in enumerate(sorted(compilation_commands.iteritems())) %}
         {% if i > 0 %}
 </tr>
@@ -128,8 +128,12 @@
         {% end %}
     <td>{{ LANGUAGE_NAMES[l] }}</td>
     <td class="compilation_command_cell">
+{% if l == "java" %}
+        <code class="compilation_command">/usr/bin/java -Xmx512 -Xss64M -jar {{ task.name }}.jar</code>
+{% else %}
 {% for cmd in c %}
         <code class="compilation_command">{{ " ".join(cmd) }}</code>
+{% end %}
 {% end %}
     </td>
     {% end %}
