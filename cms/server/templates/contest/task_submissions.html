@@ -207,7 +207,9 @@ $(document).ready(function () {
         <col class="status"/>
 {% if score_type is not None and score_type.max_public_score != 0 %}
         <col class="public_score"/>
+{% if score_type.max_public_score != score_type.max_score %}
         <col class="total_score"/>
+{% end %}
 {% else %}
         <col class="total_score"/>
 {% end %}
@@ -226,7 +228,9 @@ $(document).ready(function () {
             <th class="status">{{ _("Status") }}</th>
 {% if score_type is not None and score_type.max_public_score != 0 %}
             <th class="public_score">{{ _("Public score") }}</th>
+{% if score_type.max_public_score != score_type.max_score %}
             <th class="total_score">{{ _("Total score") }}</th>
+{% end %}
 {% else %}
             <th class="total_score">{{ _("Score") }}</th>
 {% end %}

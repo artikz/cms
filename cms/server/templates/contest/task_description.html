@@ -32,12 +32,10 @@
     </div>
 </div>
 {% else %}
-<div class="statement many_statements">
+<div class="statement one_statement">
     <div class="main_statements">
         <p>
-            {{ _("The statement for this task is available in multiple versions, in different languages.") }}
-            {{ _("You can see (and download) all of them using the list on the right.") }}
-            {{ _("Some suggested translations follow.") }}
+            {{ _("The statement for this task is available in different languages.") }}
         </p>
     {% set task_primary = json.loads(task.primary_statements) %}
     {% for statement in sorted(task.statements.itervalues(), key=lambda x: x.language_name) %}
@@ -63,23 +61,6 @@
         </a>
         {% end %}
     {% end %}
-    </div>
-    <div class="all_statements well">
-        <div>
-            <ul>
-    {% for statement in sorted(task.statements.itervalues(), key=lambda x: x.language_name) %}
-                <li>
-                    <a href="{{ url_root }}/tasks/{{ encode_for_url(task.name) }}/statements/{{ encode_for_url(statement.language) }}">
-        {% if statement.language != statement.language_name %}
-            {% raw _("<b>%s</b>") % escape(statement.language_name) %}
-        {% else %}
-            {% raw _("%s") % escape(statement.language_name) %}
-        {% end %}
-                    </a>
-                </li>
-    {% end %}
-            </ul>
-        </div>
     </div>
 </div>
 {% end %}
