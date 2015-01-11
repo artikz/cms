@@ -149,7 +149,7 @@ ALL_TESTS = [
 
     Test('fork',
          task=batch_stdio, filename='fork.%l',
-         languages=(LANG_C, LANG_CPP),
+         languages=(LANG_C, LANG_CPP, LANG_JAVA),
          checks=[CheckOverallScore(0, 100)]),
 
     # OOM problems.

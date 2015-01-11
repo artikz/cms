@@ -73,7 +73,7 @@ class JobException(Exception):
 
 
 def get_compilation_commands(language, source_filenames, executable_filename,
-                             for_evaluation=True):
+                             for_evaluation=True, with_grader=False):
     """Return the compilation commands.
 
     The compilation commands are for the specified language, source
@@ -108,7 +108,7 @@ def get_compilation_commands(language, source_filenames, executable_filename,
         command = ["/usr/bin/g++"]
         if for_evaluation:
             command += ["-DEVAL"]
-        command += ["-static", "-O2", "-std=c++11",
+        command += ["-static", "-O2", #"-std=c++11",
                     "-o", executable_filename]
         command += source_filenames
         commands.append(command)
@@ -137,15 +137,27 @@ def get_compilation_commands(language, source_filenames, executable_filename,
         commands.append(command)
     elif language == LANG_JAVA:
         class_name = os.path.splitext(source_filenames[0])[0]
-        command = ["/usr/bin/gcj", "--main=%s" % class_name, "-O3", "-o",
-                   executable_filename] + source_filenames
+        # if not with_grader:
+        prepare_guard_command = ["/bin/bash", "-c", "cat /etc/guard.java  | sed s/%%SOLUTION_CLASS%%/%s/ > guard.java" % (class_name, )]
+        source_filenames.append("guard.java")
+        commands.append(prepare_guard_command)
+
+        command = ["/usr/bin/javac"] + source_filenames
+        executable_class_name = "guard"
+        # if with_grader:
+        #     executable_class_name = "grader"
+        jar_command = ["/bin/bash", "-c", "/usr/bin/jar cfe %s.jar %s *.class" %
+            (class_name, executable_class_name)]
+        mv_command = ["/bin/mv", "%s.jar" % class_name, executable_filename]
         commands.append(command)
+        commands.append(jar_command)
+        commands.append(mv_command)
     else:
         raise ValueError("Unknown language %s." % language)
     return commands
 
 
-def get_evaluation_commands(language, executable_filename):
+def get_evaluation_commands(language, executable_filename, with_grader=False):
     """Return the evaluation commands.
 
     The evaluation commands are for the given language and executable
@@ -159,7 +171,7 @@ def get_evaluation_commands(language, executable_filename):
 
     """
     commands = []
-    if language in (LANG_C, LANG_CPP, LANG_PASCAL, LANG_JAVA):
+    if language in (LANG_C, LANG_CPP, LANG_PASCAL):
         command = [os.path.join(".", executable_filename)]
         commands.append(command)
     elif language == LANG_PYTHON:
@@ -169,6 +181,11 @@ def get_evaluation_commands(language, executable_filename):
         commands.append(command)
     elif language == LANG_PHP:
         command = ["/usr/bin/php5", executable_filename]
+        commands.append(command)
+    elif language == LANG_JAVA:
+        mv_command = ["/bin/mv", executable_filename, "%s.jar" % executable_filename]
+        commands.append(mv_command)
+        command = ["/usr/bin/java", "-Xmx512M", "-Xss64M", "-jar", "%s.jar" % executable_filename]
         commands.append(command)
     else:
         raise ValueError("Unknown language %s." % language)
@@ -230,25 +247,36 @@ def compilation_step(sandbox, commands):
     sandbox.timeout = 10
     sandbox.wallclock_timeout = 20
     sandbox.address_space = 512 * 1024
-    sandbox.stdout_file = "compiler_stdout.txt"
-    sandbox.stderr_file = "compiler_stderr.txt"
 
     # Actually run the compilation commands.
     logger.debug("Starting compilation step.")
+    steps = 0
     for command in commands:
+        sandbox.stdout_file = "compiler_stdout_%d.txt" % steps
+        sandbox.stderr_file = "compiler_stderr_%d.txt" % steps
         box_success = sandbox.execute_without_std(command, wait=True)
         if not box_success:
             logger.error("Compilation aborted because of "
                          "sandbox error in `%s'.", sandbox.path)
             return False, None, None, None
+        steps += 1
+        if sandbox.get_exit_status() != Sandbox.EXIT_OK or \
+            sandbox.get_exit_code() != 0:
+            break
 
     # Detect the outcome of the compilation.
     exit_status = sandbox.get_exit_status()
     exit_code = sandbox.get_exit_code()
-    stdout = sandbox.get_file_to_string("compiler_stdout.txt")
-    stdout = unicode(stdout, 'utf-8', errors='replace')
-    stderr = sandbox.get_file_to_string("compiler_stderr.txt")
-    stderr = unicode(stderr, 'utf-8', errors='replace')
+    stdout = ""
+    for i in xrange(0, steps):
+        stdout_i = sandbox.get_file_to_string("compiler_stdout_%d.txt" % i)
+        stdout_i = unicode(stdout_i, 'utf-8', errors='replace')
+        stdout += stdout_i
+    stderr = ""
+    for i in xrange(0, steps):
+        stderr_i = sandbox.get_file_to_string("compiler_stderr_%d.txt" % i)
+        stderr_i = unicode(stderr_i, 'utf-8', errors='replace')
+        stderr += stderr_i
 
     # And retrieve some interesting data.
     plus = {

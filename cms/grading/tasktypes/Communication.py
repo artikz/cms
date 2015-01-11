@@ -29,7 +29,7 @@ import os
 import tempfile
 
 from cms import LANGUAGES, LANGUAGE_TO_SOURCE_EXT_MAP, \
-    LANGUAGE_TO_HEADER_EXT_MAP, LANGUAGE_TO_OBJ_EXT_MAP, config
+    LANGUAGE_TO_HEADER_EXT_MAP, LANGUAGE_TO_OBJ_EXT_MAP, LANG_JAVA, config
 from cms.grading.Sandbox import wait_without_std
 from cms.grading import get_compilation_commands, compilation_step, \
     human_evaluation_message, is_evaluation_passed, \
@@ -177,6 +177,11 @@ class Communication(TaskType):
         # Create sandboxes and FIFOs
         sandbox_mgr = create_sandbox(file_cacher)
         sandbox_user = create_sandbox(file_cacher)
+
+        if job.language == LANG_JAVA:
+            sandbox_mgr.max_processes = None
+            sandbox_user.max_processes = None
+
         fifo_dir = tempfile.mkdtemp(dir=config.temp_dir)
         fifo_in = os.path.join(fifo_dir, "in")
         fifo_out = os.path.join(fifo_dir, "out")
@@ -214,12 +219,15 @@ class Communication(TaskType):
         # Second step: we start the user submission compiled with the
         # stub.
         executable_filename = job.executables.keys()[0]
-        command = ["./%s" % executable_filename, fifo_out, fifo_in]
+        if job.language == LANG_JAVA:
+            command = ["/usr/bin/java", "-jar", executable_filename, fifo_out, fifo_in]
+        else:
+            command = ["./%s" % executable_filename, fifo_out, fifo_in]
         executables_to_get = {
             executable_filename:
             job.executables[executable_filename].digest
             }
-        user_allow_dirs = [fifo_dir]
+        user_allow_dirs = [fifo_dir, "/etc/alternatives"]
         for filename, digest in executables_to_get.iteritems():
             sandbox_user.create_file_from_storage(
                 filename, digest, executable=True)
