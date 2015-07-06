@@ -24,6 +24,7 @@ from __future__ import unicode_literals
 
 import json
 import io
+import json
 import logging
 import os
 import sys
@@ -165,99 +166,270 @@ class PolygonTaskLoader(TaskLoader):
         if task_cms_conf is not None and hasattr(task_cms_conf, "general"):
             args.update(task_cms_conf.general)
 
+        print(task_cms_conf.datasets)
         task = Task(**args)
 
+        self.task = task
+
         judging = root.find('judging')
-        testset = None
+
+        # Though some parameters are coming from a testset, they actually
+        # the same in all testsets
+        some_testset = judging[0]
+
+        active_dataset_name = None
+
+        dataset_default_args = {}
+        dataset_default_args["task"] = task
+        dataset_default_args["autojudge"] = False
+        tl = float(some_testset.find('time-limit').text)
+        ml = float(some_testset.find('memory-limit').text)
+        dataset_default_args["time_limit"] = tl * 0.001
+        dataset_default_args["memory_limit"] = int(ml / (1024 * 1024))
+        infile_param = judging.attrib['input-file']
+        outfile_param = judging.attrib['output-file']
+
+        checker_src = os.path.join(self.path, "files", "check.cpp")
+        checker_exe = None
+        if os.path.exists(checker_src):
+            logger.info("Checker found, compiling")
+            checker_exe = os.path.join(self.path, "files", "checker")
+            testlib_path = "/usr/local/include/cms/testlib.h"
+            if not config.installed:
+                testlib_path = os.path.join(os.path.dirname(__file__),
+                                            "polygon", "testlib.h")
+            os.system("cat %s | \
+                sed 's$testlib.h$%s$' | \
+                g++ -x c++ -O2 -static -o %s -" %
+                      (checker_src, testlib_path, checker_exe))
+            evaluation_param = "comparator"
+        else:
+            logger.info("Checker not found, using diff")
+            evaluation_param = "diff"
+
+        dataset_default_args["task_type"] = "Batch"
+        compilation_type = "alone"
+        if task_cms_conf is not None and \
+           hasattr(task_cms_conf, "sources") and \
+           len(task_cms_conf.sources) > 0:
+            compilation_type = "grader"
+
+        dataset_default_args["task_type_parameters"] = \
+            '["%s", ["%s", "%s"], "%s"]' % \
+            (compilation_type, infile_param, outfile_param, evaluation_param)
+
+        dataset_default_args["score_type"] = "Sum"
+
+        testsets = {}
+        datasets_auto = {}
         for testset in judging:
             testset_name = testset.attrib["name"]
+            testsets[testset_name] = testset
 
-            args = {}
-            args["task"] = task
+            if not active_dataset_name or testset_name == "tests":
+                active_dataset_name = testset_name
+
+            args = dataset_default_args.copy()
             args["description"] = testset_name
-            args["autojudge"] = False
-
-            tl = float(testset.find('time-limit').text)
-            ml = float(testset.find('memory-limit').text)
-            args["time_limit"] = tl * 0.001
-            args["memory_limit"] = int(ml / (1024 * 1024))
-
             args["managers"] = []
-            infile_param = judging.attrib['input-file']
-            outfile_param = judging.attrib['output-file']
+            args["testcases"] = []
+            args["polygon_auto"] = True
+            args["polygon_testset"] = testset_name
 
-            checker_src = os.path.join(self.path, "files", "check.cpp")
-            if os.path.exists(checker_src):
-                logger.info("Checker found, compiling")
-                checker_exe = os.path.join(self.path, "files", "checker")
-                testlib_path = "/usr/local/include/cms/testlib.h"
-                if not config.installed:
-                    testlib_path = os.path.join(os.path.dirname(__file__),
-                                                "polygon", "testlib.h")
-                os.system("cat %s | \
-                    sed 's$testlib.h$%s$' | \
-                    g++ -x c++ -O2 -static -o %s -" %
-                          (checker_src, testlib_path, checker_exe))
-                digest = self.file_cacher.put_file_from_path(
-                    checker_exe,
-                    "Manager for task %s" % name)
-                args["managers"] += [
-                    Manager("checker", digest)]
-                evaluation_param = "comparator"
-            else:
-                logger.info("Checker not found, using diff")
-                evaluation_param = "diff"
-
-            args["task_type"] = "Batch"
-            args["task_type_parameters"] = \
-                '["%s", ["%s", "%s"], "%s"]' % \
-                ("alone", infile_param, outfile_param, evaluation_param)
-
-            args["score_type"] = "Sum"
             total_value = 100.0
             input_value = 0.0
 
-            testcases = int(testset.find('test-count').text)
+            n_testcases = int(testset.find('test-count').text)
 
-            n_input = testcases
-            if n_input != 0:
-                input_value = total_value / n_input
+            if n_testcases != 0:
+                input_value = total_value / n_testcases
             args["score_type_parameters"] = str(input_value)
 
-            args["testcases"] = []
+            datasets_auto[testset_name] = args
 
-            for i in xrange(testcases):
-                infile = os.path.join(self.path, testset_name,
-                                      "%02d" % (i + 1))
-                outfile = os.path.join(self.path, testset_name,
-                                       "%02d.a" % (i + 1))
-                if self.dos2unix_found:
-                    os.system('dos2unix -q %s' % (infile, ))
-                    os.system('dos2unix -q %s' % (outfile, ))
-                input_digest = self.file_cacher.put_file_from_path(
-                    infile,
-                    "Input %d for task %s" % (i, name))
-                output_digest = self.file_cacher.put_file_from_path(
-                    outfile,
-                    "Output %d for task %s" % (i, name))
-                testcase = Testcase("%03d" % (i, ), False,
-                                    input_digest, output_digest)
-                testcase.public = True
-                args["testcases"] += [testcase]
+        print("auto %s" % repr(datasets_auto))
+        used_testsets = set()
+
+        datasets = {}
+
+        if task_cms_conf is not None and \
+           hasattr(task_cms_conf, "datasets"):
+            # If there is a manual dataset, it should be used as active one
+            active_dataset_name = None
+            for ds_name, ds_args in task_cms_conf.datasets.iteritems():
+                if not active_dataset_name or ds_name == "tests":
+                    active_dataset_name = ds_name
+                args = dataset_default_args.copy()
+                if ds_name in datasets_auto:
+                    args = datasets_auto[ds_name]
+                    used_testsets.add(ds_name)
+                else:
+                    args["description"] = ds_name
+                    args["managers"] = []
+                    args["testcases"] = []
+                    args["polygon_testset"] = "tests"
+
+                    n_testcases = int(testset.find('test-count').text)
+
+                    if n_testcases != 0:
+                        input_value = total_value / n_testcases
+                    args["score_type_parameters"] = str(input_value)
+
+                args["polygon_auto"] = False
+                args.update(ds_args)
+
+                datasets[ds_name] = args;
+
+        print("other %s" % repr(datasets))
+
+        datasets_list = datasets.keys()
+        datasets_list += datasets_auto.keys()
+        datasets_auto.update(datasets)
+        datasets = datasets_auto
+
+        for ds_name in datasets_list:
+            ds_args = datasets[ds_name]
+            if "polygon_auto" not in ds_args or \
+               (ds_args["polygon_auto"] and ds_name in used_testsets):
+                continue
+            print("dataset %s" % ds_name)
+            print(ds_args)
+            if isinstance(ds_args["score_type_parameters"], list):
+                for subtask in ds_args["score_type_parameters"]:
+                    start_testcase = len(ds_args["testcases"]) + 1
+                    ignore_testcases = False
+                    if "polygon_testsets" in subtask:
+                        for ts_name in subtask["polygon_testsets"]:
+                            self.add_testset_to_dataset(testsets[ts_name],
+                                ds_args)
+                            used_testsets.add(ts_name)
+                        del subtask["polygon_testsets"]
+                        if "polygon_testset" in subtask:
+                            logger.warn("\"polygon_testset\" is ignored " \
+                                "in dataset %s", ds_name)
+                        if "polygon_testcases" in subtask:
+                            logger.warn("\"polygon_testcases\" is ignored " \
+                                "in dataset %s", ds_name)
+                        ignore_testcases = True
+                    else:
+                        ts_name = ds_args["polygon_testset"]
+                        if "polygon_testset" in subtask:
+                            ts_name = subtask["polygon_testset"]
+                            del subtask["polygon_testset"]
+                            ignore_testcases = True
+                        testcases_to_use = None
+                        if "polygon_testcases" in subtask:
+                            testcases_to_use = subtask["polygon_testcases"]
+                            del subtask["polygon_testcases"]
+                            ignore_testcases = True
+                        used_testsets.add(ts_name)
+                        if ignore_testcases or start_testcase == 1:
+                            self.add_testset_to_dataset(testsets[ts_name],
+                                ds_args, testcases_to_use)
+                    end_testcase = len(ds_args["testcases"])
+                    if "testcases" not in subtask:
+                        subtask["testcases"] = [(start_testcase, end_testcase)]
+                    elif ignore_testcases:
+                        logger.warn("\"testcases\" is ignored " \
+                            "in dataset %s", ds_name)
+                ds_args["score_type_parameters"] = json.dumps(ds_args["score_type_parameters"])
+            else:
+                self.add_testset_to_dataset(testsets[ds_name], ds_args)
+            if checker_exe:
+                digest = self.file_cacher.put_file_from_path(
+                    checker_exe,
+                    "Manager for task %s" % name)
+                ds_args["managers"] += [
+                    Manager("checker", digest)]
 
             if task_cms_conf is not None and \
-               hasattr(task_cms_conf, "datasets") and \
-               testset_name in task_cms_conf.datasets:
-                args.update(task_cms_conf.datasets[testset_name])
+               hasattr(task_cms_conf, "sources"):
+                for filename in task_cms_conf.sources:
+                    filepath = os.path.join(self.path, "files", filename)
+                    digest = self.file_cacher.put_file_from_path(
+                        filepath,
+                        "%s - additional file for task %s" % (filename, name))
+                    ds_args["managers"] += [
+                        Manager(filename, digest)]
 
-            dataset = Dataset(**args)
-            if testset_name == "tests":
+            del ds_args["polygon_testset"]
+            del ds_args["polygon_auto"]
+            print(ds_args)
+            dataset = Dataset(**ds_args)
+            if ds_name == active_dataset_name:
                 task.active_dataset = dataset
+
+            print(task.datasets)
+
+            # testcases = []
+
+            # for i in xrange(n_testcases):
+            #     infile = os.path.join(self.path, testset_name,
+            #                           "%02d" % (i + 1))
+            #     outfile = os.path.join(self.path, testset_name,
+            #                            "%02d.a" % (i + 1))
+            #     if self.dos2unix_found:
+            #         os.system('dos2unix -q %s' % (infile, ))
+            #         os.system('dos2unix -q %s' % (outfile, ))
+            #     input_digest = self.file_cacher.put_file_from_path(
+            #         infile,
+            #         "Input %d for task %s" % (i, name))
+            #     output_digest = self.file_cacher.put_file_from_path(
+            #         outfile,
+            #         "Output %d for task %s" % (i, name))
+            #     testcase = Testcase("%03d" % (i, ), False,
+            #                         input_digest, output_digest)
+            #     testcase.public = True
+            #     testcases += [testcase]
+
+            # testsets[testset_name] = testcases
+
+
+
 
         os.remove(os.path.join(self.path, ".import_error"))
 
         logger.info("Task parameters loaded.")
         return task
+
+    def add_testset_to_dataset(self, testset, ds_args, testcases_to_use=None):
+        if testcases_to_use:
+            testcases_to_use = self.testcases_indices_from_intervals(testcases_to_use)
+        testset_name = testset.attrib["name"]
+        n_testcases = int(testset.find('test-count').text)
+        testcases = []
+        for i in xrange(n_testcases):
+            if testcases_to_use and i not in testcases_to_use:
+                continue
+            print("testcase %d" % i)
+            infile = os.path.join(self.path, testset_name,
+                                  "%02d" % (i + 1))
+            outfile = os.path.join(self.path, testset_name,
+                                   "%02d.a" % (i + 1))
+            if self.dos2unix_found:
+                os.system('dos2unix -q %s' % (infile, ))
+                os.system('dos2unix -q %s' % (outfile, ))
+            input_digest = self.file_cacher.put_file_from_path(
+                infile,
+                "Input %d for task %s" % (i, self.task.name))
+            output_digest = self.file_cacher.put_file_from_path(
+                outfile,
+                "Output %d for task %s" % (i, self.task.name))
+            testcase = Testcase("%03d" % (i, ), False,
+                                input_digest, output_digest)
+            testcase.public = True
+            testcases += [testcase]
+        ds_args["testcases"] += testcases
+
+    def testcases_indices_from_intervals(self, testcases_intervals):
+        testcases = set()
+        for tc in testcases_intervals:
+            if isinstance(tc, int):
+                testcases.add(tc)
+            else:
+                for tc_idx in xrange(tc[0], tc[1] + 1):
+                    testcases.add(tc_idx)
+        return testcases
 
 
 class PolygonUserLoader(UserLoader):
