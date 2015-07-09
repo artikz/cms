@@ -223,7 +223,7 @@ class PolygonTaskLoader(TaskLoader):
         testsets = {}
         datasets_auto = {}
         for testset in judging:
-            testset_name = testset.attrib["name"]
+            testset_name = testset.attrib["name"].lower()
             testsets[testset_name] = testset
 
             if not active_dataset_name or testset_name == "tests":
@@ -300,6 +300,7 @@ class PolygonTaskLoader(TaskLoader):
                     ignore_testcases = False
                     if "polygon_testsets" in subtask:
                         for ts_name in subtask["polygon_testsets"]:
+                            ts_name = ts_name.lower()
                             self.add_testset_to_dataset(testsets[ts_name],
                                 ds_args)
                             used_testsets.add(ts_name)
@@ -314,7 +315,7 @@ class PolygonTaskLoader(TaskLoader):
                     else:
                         ts_name = ds_args["polygon_testset"]
                         if "polygon_testset" in subtask:
-                            ts_name = subtask["polygon_testset"]
+                            ts_name = subtask["polygon_testset"].lower()
                             del subtask["polygon_testset"]
                             ignore_testcases = True
                         testcases_to_use = None
