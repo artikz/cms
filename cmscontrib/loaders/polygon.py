@@ -159,14 +159,13 @@ class PolygonTaskLoader(TaskLoader):
         if os.path.exists(os.path.join(task_cms_conf_path, 'cms_conf.py')):
             sys.path.append(task_cms_conf_path)
             logger.info("Found additional CMS options for task %s.", name)
-            task_cms_conf = __import__('cms_conf')
-            # TODO: probably should find more clever way to get rid of caching
-            task_cms_conf = reload(task_cms_conf)
+            task_cms_conf = {}
+            with open(os.path.join(task_cms_conf_path, 'cms_conf.py')) as cms_conf:
+                exec cms_conf in task_cms_conf
             sys.path.pop()
         if task_cms_conf is not None and hasattr(task_cms_conf, "general"):
             args.update(task_cms_conf.general)
 
-        print(task_cms_conf.datasets)
         task = Task(**args)
 
         self.task = task
@@ -211,7 +210,7 @@ class PolygonTaskLoader(TaskLoader):
         compilation_type = "alone"
         if task_cms_conf is not None and \
            hasattr(task_cms_conf, "sources") and \
-           len(task_cms_conf.sources) > 0:
+           len(task_cms_conf["sources"]) > 0:
             compilation_type = "grader"
 
         dataset_default_args["task_type_parameters"] = \
@@ -256,7 +255,7 @@ class PolygonTaskLoader(TaskLoader):
            hasattr(task_cms_conf, "datasets"):
             # If there is a manual dataset, it should be used as active one
             active_dataset_name = None
-            for ds_name, ds_args in task_cms_conf.datasets.iteritems():
+            for ds_name, ds_args in task_cms_conf["datasets"].iteritems():
                 if not active_dataset_name or ds_name == "tests":
                     active_dataset_name = ds_name
                 args = dataset_default_args.copy()
@@ -345,7 +344,7 @@ class PolygonTaskLoader(TaskLoader):
 
             if task_cms_conf is not None and \
                hasattr(task_cms_conf, "sources"):
-                for filename in task_cms_conf.sources:
+                for filename in task_cms_conf["sources"]:
                     filepath = os.path.join(self.path, "files", filename)
                     digest = self.file_cacher.put_file_from_path(
                         filepath,
