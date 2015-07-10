@@ -398,11 +398,13 @@ class PolygonTaskLoader(TaskLoader):
             testcases_to_use = self.testcases_indices_from_intervals(testcases_to_use)
         testset_name = testset.attrib["name"]
         n_testcases = int(testset.find('test-count').text)
+        start_testcase_index = len(ds_args["testcases"])
         testcases = []
         for i in xrange(n_testcases):
             if testcases_to_use and i not in testcases_to_use:
                 continue
-            print("testcase %d" % i)
+            cms_i = start_testcase_index + i
+            print("testcase %d" % cms_i)
             infile = os.path.join(self.path, testset_name,
                                   "%02d" % (i + 1))
             outfile = os.path.join(self.path, testset_name,
@@ -412,11 +414,11 @@ class PolygonTaskLoader(TaskLoader):
                 os.system('dos2unix -q %s' % (outfile, ))
             input_digest = self.file_cacher.put_file_from_path(
                 infile,
-                "Input %d for task %s" % (i, self.task.name))
+                "Input %d for task %s" % (cms_i, self.task.name))
             output_digest = self.file_cacher.put_file_from_path(
                 outfile,
-                "Output %d for task %s" % (i, self.task.name))
-            testcase = Testcase("%03d" % (i, ), False,
+                "Output %d for task %s" % (cms_i, self.task.name))
+            testcase = Testcase("%03d" % cms_i, False,
                                 input_digest, output_digest)
             testcase.public = True
             testcases += [testcase]
