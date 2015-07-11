@@ -164,7 +164,7 @@ class PolygonTaskLoader(TaskLoader):
                 exec cms_conf in task_cms_conf
             sys.path.pop()
         if task_cms_conf is not None and "general" in task_cms_conf:
-            args.update(task_cms_conf.general)
+            args.update(task_cms_conf["general"])
 
         task = Task(**args)
 
