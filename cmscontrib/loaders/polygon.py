@@ -115,7 +115,8 @@ class PolygonTaskLoader(TaskLoader):
         root = tree.getroot()
 
         args["name"] = name
-        args["title"] = root.find('names').find("name").attrib['value']
+        args["title"] = root.find('names').find("name").attrib['value'] + \
+                        " (r" + root.attrib['revision'] + ")"
 
         if get_statement:
             args["statements"] = []
