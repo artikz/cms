@@ -1917,6 +1917,9 @@ NORETURN void InStream::quit(TResult result, const char* msg)
     if (result == _ok) {
       std::fprintf(stdout, "1.0\n");
       std::fprintf(stderr, "OK\n");
+    } else if (result == _points) {
+      std::fprintf(stdout, "%.2f\n", __testlib_points);
+      std::fprintf(stderr, "OK\n");
     } else if (result == _wa) {
       std::fprintf(stdout, "0.0\n");
       std::fprintf(stderr, "Wrong Answer\n");
