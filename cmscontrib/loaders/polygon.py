@@ -163,7 +163,7 @@ class PolygonTaskLoader(TaskLoader):
             with open(os.path.join(task_cms_conf_path, 'cms_conf.py')) as cms_conf:
                 exec cms_conf in task_cms_conf
             sys.path.pop()
-        if task_cms_conf is not None and hasattr(task_cms_conf, "general"):
+        if task_cms_conf is not None and "general" in task_cms_conf:
             args.update(task_cms_conf.general)
 
         task = Task(**args)
@@ -189,6 +189,8 @@ class PolygonTaskLoader(TaskLoader):
         outfile_param = judging.attrib['output-file']
 
         checker_src = os.path.join(self.path, "files", "check.cpp")
+        if task_cms_conf is not None and "checker" in task_cms_conf:
+            checker_src = os.path.join(self.path, "files", task_cms_conf["checker"])
         checker_exe = None
         if os.path.exists(checker_src):
             logger.info("Checker found, compiling")
@@ -209,7 +211,7 @@ class PolygonTaskLoader(TaskLoader):
         dataset_default_args["task_type"] = "Batch"
         compilation_type = "alone"
         if task_cms_conf is not None and \
-           hasattr(task_cms_conf, "sources") and \
+           "sources" in task_cms_conf and \
            len(task_cms_conf["sources"]) > 0:
             compilation_type = "grader"
 
@@ -252,7 +254,7 @@ class PolygonTaskLoader(TaskLoader):
         datasets = {}
 
         if task_cms_conf is not None and \
-           hasattr(task_cms_conf, "datasets"):
+           "datasets" in task_cms_conf:
             # If there is a manual dataset, it should be used as active one
             active_dataset_name = None
             for ds_name, ds_args in task_cms_conf["datasets"].iteritems():
@@ -343,7 +345,7 @@ class PolygonTaskLoader(TaskLoader):
                     Manager("checker", digest)]
 
             if task_cms_conf is not None and \
-               hasattr(task_cms_conf, "sources"):
+               "sources" in task_cms_conf:
                 for filename in task_cms_conf["sources"]:
                     filepath = os.path.join(self.path, "files", filename)
                     digest = self.file_cacher.put_file_from_path(
