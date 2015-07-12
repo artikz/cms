@@ -166,6 +166,12 @@ class PolygonTaskLoader(TaskLoader):
             sys.path.pop()
         if task_cms_conf is not None and "general" in task_cms_conf:
             args.update(task_cms_conf["general"])
+            if "submission_format" in task_cms_conf["general"]:
+                format_ = []
+                for filename in task_cms_conf["general"]["submission_format"]:
+                    format_ += [SubmissionFormatElement(filename)]
+                args["submission_format"] = format_
+
 
         task = Task(**args)
 
