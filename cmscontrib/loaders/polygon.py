@@ -178,6 +178,7 @@ class PolygonTaskLoader(TaskLoader):
         self.task = task
 
         judging = root.find('judging')
+        assets = root.find('assets')
 
         # Though some parameters are coming from a testset, they actually
         # the same in all testsets
@@ -195,9 +196,11 @@ class PolygonTaskLoader(TaskLoader):
         infile_param = judging.attrib['input-file']
         outfile_param = judging.attrib['output-file']
 
-        checker_src = os.path.join(self.path, "files", "check.cpp")
+        checker_src = assets.find("checker").find("source").attrib["path"]
         if task_cms_conf is not None and "checker" in task_cms_conf:
-            checker_src = os.path.join(self.path, "files", task_cms_conf["checker"])
+            checker_src = os.path.join("files", task_cms_conf["checker"])
+        if checker_src:
+            checker_src = os.path.join(self.path, checker_src)
         checker_exe = None
         if os.path.exists(checker_src):
             logger.info("Checker found, compiling")
