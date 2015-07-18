@@ -364,7 +364,7 @@ class PolygonTaskLoader(TaskLoader):
                     ds_args["managers"] += [
                         Manager(filename, digest)]
 
-            if ds_args["polygon_auto"] and ds_args["testcases"] == 0:
+            if ds_args["polygon_auto"] and len(ds_args["testcases"]) == 0:
                 logger.info("Skipping empty auto dataset %s", ds_name)
                 continue
 
