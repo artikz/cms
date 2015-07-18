@@ -1296,8 +1296,8 @@ class EvaluationService(TriggeredService):
 
                 # self.cancel_skippable_testcases_evaluations(dataset,
                 #                                        submission_result)
-                self.lower_priority_of_skippable_testcases_evaluations(dataset,
-                                                       submission_result)
+                # self.lower_priority_of_skippable_testcases_evaluations(dataset,
+                #                                        submission_result)
                 #FIX: some ignorable testcase still can be evaluated
                 #because worker become free before we ignore evaluation jobs
 
