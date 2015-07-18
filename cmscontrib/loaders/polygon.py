@@ -272,7 +272,7 @@ class PolygonTaskLoader(TaskLoader):
                     active_dataset_name = ds_name
                 args = dataset_default_args.copy()
                 if ds_name in datasets_auto:
-                    args = datasets_auto[ds_name]
+                    args.update(datasets_auto[ds_name])
                     used_testsets.add(ds_name)
                 else:
                     args["description"] = ds_name
