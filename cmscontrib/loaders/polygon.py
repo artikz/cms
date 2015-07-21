@@ -221,9 +221,19 @@ class PolygonTaskLoader(TaskLoader):
         dataset_default_args["task_type"] = "Batch"
         compilation_type = "alone"
         if task_cms_conf is not None and \
-           "sources" in task_cms_conf and \
-           len(task_cms_conf["sources"]) > 0:
+           ("sources" in task_cms_conf and \
+           len(task_cms_conf["sources"]) > 0):
             compilation_type = "grader"
+        if ("binaries" in task_cms_conf and \
+           len(task_cms_conf["binaries"]) > 0):
+            compilation_type = "grader"
+            for (binary, command) in task_cms_conf["binaries"].iteritems():
+                logger.info("Compiling binary: %s", binary)
+                cwd = os.getcwd()
+                os.chdir(os.path.join(self.path, "files"))
+                os.system("%s" % command)
+                os.chdir(cwd)
+
 
         dataset_default_args["task_type_parameters"] = \
             '["%s", ["%s", "%s"], "%s"]' % \
@@ -357,6 +367,15 @@ class PolygonTaskLoader(TaskLoader):
             if task_cms_conf is not None and \
                "sources" in task_cms_conf:
                 for filename in task_cms_conf["sources"]:
+                    filepath = os.path.join(self.path, "files", filename)
+                    digest = self.file_cacher.put_file_from_path(
+                        filepath,
+                        "%s - additional file for task %s" % (filename, name))
+                    ds_args["managers"] += [
+                        Manager(filename, digest)]
+            if task_cms_conf is not None and \
+               "binaries" in task_cms_conf:
+                for filename in task_cms_conf["binaries"]:
                     filepath = os.path.join(self.path, "files", filename)
                     digest = self.file_cacher.put_file_from_path(
                         filepath,
