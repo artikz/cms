@@ -21,6 +21,8 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import weakref
+
 from sqlalchemy import event, util, __version__ as sa_version
 from sqlalchemy.orm import class_mapper, mapper
 from sqlalchemy.orm.collections import \
@@ -54,12 +56,36 @@ def smc_sa10_workaround(prop):
     return prop
 
 
+class WeakSomething(object):
+    def __init__(self, target, event_name, object_, method_name):
+        self.target = target
+        self.event_name = event_name
+        self.object = weakref.ref(object_, self.death_callback)
+        self.method_name = method_name
+
+        event.listen(self.target, self.event_name, self.event_callback)
+
+    def detach(self):
+        event.remove(self.target, self.event_name, self.event_callback)
+
+    def event_callback(self, *args, **kwargs):
+        object_ = self.object()
+        if object_ is not None:
+            getattr(object_, self.method_name)(*args, **kwargs)
+
+    def death_callback(self, ref):
+        assert ref is self.object
+        self.detach()
+
+
 class SmartMappedCollection(MappedCollection):
 
     def __init__(self, column_name):
         # Whether the collection is currently being used for a parent's
         # relationship attribute or not.
         self.linked = False
+
+        self.event_wrapper = None
 
         # Useful references, that will be obtained upon linking.
         self.parent_obj = None
@@ -96,7 +122,8 @@ class SmartMappedCollection(MappedCollection):
         self.child_rel_prop = \
             class_mapper(self.child_cls).get_property(self.child_key_name)
 
-        event.listen(self.child_rel_prop, 'set', self.on_key_update)
+        self.event_wrapper = WeakSomething(self.child_rel_prop, 'set',
+                                           self, 'on_key_update')
 
     # Called when the object stops being used. We basically undo what
     # was done in on_dispose and restore a pristine state.
@@ -104,7 +131,8 @@ class SmartMappedCollection(MappedCollection):
         assert self.linked
         self.linked = False
 
-        event.remove(self.child_rel_prop, 'set', self.on_key_update)
+        self.event_wrapper.detach()
+        self.event_wrapper = None
 
         self.parent_obj = None
         self.child_cls = None
