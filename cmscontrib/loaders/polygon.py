@@ -224,7 +224,8 @@ class PolygonTaskLoader(TaskLoader):
            ("sources" in task_cms_conf and \
            len(task_cms_conf["sources"]) > 0):
             compilation_type = "grader"
-        if ("binaries" in task_cms_conf and \
+        if task_cms_conf is not None and \
+           ("binaries" in task_cms_conf and \
            len(task_cms_conf["binaries"]) > 0):
             compilation_type = "grader"
             for (binary, command) in task_cms_conf["binaries"].iteritems():
