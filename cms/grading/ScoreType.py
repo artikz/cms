@@ -71,7 +71,7 @@ class ScoreType(object):
         self.max_score, self.max_public_score, self.ranking_headers = \
             self.max_scores()
 
-    def get_html_details(self, score_details, translator=None):
+    def get_html_details(self, score_details, translator=None, only_statistics=False):
         """Return an HTML string representing the score details of a
         submission.
 
@@ -94,7 +94,8 @@ class ScoreType(object):
             return translator("Score details temporarily unavailable.")
         else:
             return Template(self.TEMPLATE).generate(details=score_details,
-                                                    _=translator)
+                                                    _=translator,
+                                                    only_statistics=only_statistics)
 
     def max_scores(self):
         """Returns the maximum score that one could aim to in this
@@ -185,6 +186,66 @@ class ScoreTypeGroup(ScoreTypeAlone):
         </span>
     {% end %}
     </div>
+
+{% if only_statistics %}
+    <div class="subtask-body">
+        <table class="testcase-list">
+            <thead>
+                <tr>
+                    <th>{{ _("Verdict") }}</th>
+                    <th>{{ _("Number of testcases") }}</th>
+                    <th>{{ _("Maximum execution time") }}</th>
+                    <th>{{ _("Maximum memory used") }}</th>
+                </tr>
+            </thead>
+            <tbody>
+    {% set statistics = {} %}
+    {% set outcome_class = {} %}
+    {% set time = {} %}
+    {% set memory = {} %}
+    {% for tc in st["testcases"] %}
+        {% if "outcome" in tc and "text" in tc %}
+            {% set key = _(tc["outcome"]) + ": " + format_status_text(tc["text"], _) %}
+            {% if key not in statistics %}
+                {% set statistics[key] = 0 %}
+            {% else %}
+                {% set statistics[key] += 1 %}
+            {% end %}
+
+            {% if tc["outcome"] == "Correct" %}
+                {% set outcome_class[key] = "correct" %}
+            {% elif tc["outcome"] == "Not correct" %}
+                {% set outcome_class[key] = "notcorrect" %}
+            {% else %}
+                {% set outcome_class[key] = "partiallycorrect" %}
+            {% end %}
+
+            {% if "time" in tc and tc["time"] is not None %}
+                {% set time[key] = max(tc["time"], time[key] if key in time else 0.0) %}
+            {% end %}
+            {% if "memory" in tc and tc["memory"] is not None %}
+                {% set memory[key] = max(tc["memory"], memory[key] if key in memory else 0.0) %}
+            {% end %}
+        {% end %}
+    {% end %}
+    {% for (outcome, count) in statistics.iteritems() %}
+                <tr class="{{ outcome_class[outcome] }}">
+                    <td>{{ outcome }}</td>
+                    <td>{{ count }}</td>
+                    <td>{{ _("%(seconds)0.3f s") % {'seconds': time[outcome]} if outcome in time else "N/A" }}</td>
+                    <td>
+                    {% if outcome in memory %}
+                        {{ format_size(memory[outcome]) }}
+                    {% else %} 
+                        N/A
+                    {% end %}
+                    </td>
+                </tr>
+    {% end %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
     <div class="subtask-body">
         <table class="testcase-list">
             <thead>
@@ -232,8 +293,11 @@ class ScoreTypeGroup(ScoreTypeAlone):
             </tbody>
         </table>
     </div>
+{% end %}
+
 </div>
 {% end %}"""
+
 
     def max_scores(self):
         """See ScoreType.max_score."""

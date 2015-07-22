@@ -511,7 +511,7 @@ class SubmissionDetailsHandler(BaseHandler):
                 details = sr.public_score_details
 
             if sr.scored():
-                details = score_type.get_html_details(details, self._)
+                details = score_type.get_html_details(details, self._, True)
             else:
                 details = None
 
