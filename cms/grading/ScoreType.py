@@ -328,10 +328,10 @@ class ScoreTypeGroup(ScoreTypeAlone):
 
         for i, parameter in enumerate(self.parameters):
             target = targets[i]
-            score += parameter[0]
+            score += parameter["points"]
             if all(self.public_testcases[idx] for idx in target):
-                public_score += parameter[0]
-            headers += ["Subtask %d (%g)" % (i + 1, parameter[0])]
+                public_score += parameter["points"]
+            headers += ["Subtask %d (%g)" % (i + 1, parameter["points"])]
 
         return score, public_score, headers
 
@@ -354,7 +354,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
             target = targets[st_idx]
             st_score = self.reduce([float(evaluations[idx].outcome)
                                     for idx in target], st_scores,
-                                   parameter) * parameter[0]
+                                   parameter) * parameter["points"]
             st_scores.append(st_score)
             st_public = all(self.public_testcases[idx] for idx in target)
             tc_outcomes = dict((
@@ -380,7 +380,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
             subtasks.append({
                 "idx": st_idx + 1,
                 "score": st_score,
-                "max_score": parameter[0],
+                "max_score": parameter["points"],
                 "testcases": testcases,
                 })
             if st_public:
