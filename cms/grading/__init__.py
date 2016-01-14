@@ -192,7 +192,7 @@ class JobException(Exception):
 
 
 def get_compilation_commands(language, source_filenames, executable_filename,
-                             for_evaluation=True):
+                             for_evaluation=True, with_grader=False):
     """Return the compilation commands.
 
     The compilation commands are for the specified language, source
@@ -257,9 +257,20 @@ def get_compilation_commands(language, source_filenames, executable_filename,
         commands.append(command)
     elif language == LANG_JAVA:
         class_name = os.path.splitext(source_filenames[0])[0]
-        command = ["/usr/bin/gcj", "--main=%s" % class_name, "-O3", "-o",
-                   executable_filename] + source_filenames
+        command = ["/usr/bin/javac"] + source_filenames
+        executable_class_name = class_name
+        if with_grader:
+            executable_class_name = "grader"
+        # jar_command = ["/bin/bash", "-c", "/usr/bin/jar cfe %s.jar %s *.class" %
+        #     (class_name, executable_class_name)]
+        # mv_command = ["/bin/mv", "%s.jar" % class_name, executable_filename]
+        zip_command = ["/bin/bash", "-c", "/usr/bin/zip %s.zip *.class" %
+            (class_name, )]
+        mv_command = ["/bin/mv", "%s.zip" % class_name, executable_filename]
         commands.append(command)
+        # commands.append(jar_command)
+        commands.append(zip_command)
+        commands.append(mv_command)
     else:
         raise ValueError("Unknown language %s." % language)
     return commands
@@ -279,7 +290,7 @@ def get_evaluation_commands(language, executable_filename):
 
     """
     commands = []
-    if language in (LANG_C, LANG_CPP, LANG_PASCAL, LANG_JAVA):
+    if language in (LANG_C, LANG_CPP, LANG_PASCAL):
         command = [os.path.join(".", executable_filename)]
         commands.append(command)
     elif language == LANG_PYTHON:
@@ -289,6 +300,12 @@ def get_evaluation_commands(language, executable_filename):
         commands.append(command)
     elif language == LANG_PHP:
         command = ["/usr/bin/php5", executable_filename]
+        commands.append(command)
+    elif language == LANG_JAVA:
+        command = ["/usr/bin/unzip", executable_filename]
+        commands.append(command)
+        command = ["/usr/bin/java", "-Djava.library.path=.", "-Xmx512M",
+                   "-Xss64M", "grader"]
         commands.append(command)
     else:
         raise ValueError("Unknown language %s." % language)
@@ -490,10 +507,14 @@ def evaluation_step(sandbox, commands,
 
     """
     for command in commands:
+        non_secure = False
+        if "unzip" in command[0]:
+            non_secure = True
+
         success = evaluation_step_before_run(
             sandbox, command, time_limit, memory_limit,
             allow_dirs, writable_files,
-            stdin_redirect, stdout_redirect, wait=True)
+            stdin_redirect, stdout_redirect, wait=True, non_secure=non_secure)
         if not success:
             logger.debug("Job failed in evaluation_step_before_run.")
             return False, None
@@ -509,7 +530,7 @@ def evaluation_step_before_run(sandbox, command,
                                time_limit=0, memory_limit=0,
                                allow_dirs=None, writable_files=None,
                                stdin_redirect=None, stdout_redirect=None,
-                               wait=False):
+                               wait=False, non_secure=False):
     """First part of an evaluation step, until the running.
 
     return: exit code already translated if wait is True, the
@@ -550,7 +571,7 @@ def evaluation_step_before_run(sandbox, command,
 
     # Actually run the evaluation command.
     logger.debug("Starting execution step.")
-    return sandbox.execute_without_std(command, wait=wait)
+    return sandbox.execute_without_std(command, wait=wait, non_secure=non_secure)
 
 
 def evaluation_step_after_run(sandbox):
