@@ -48,6 +48,25 @@ class GroupMin(ScoreTypeGroup):
         else:
             return N_("Partially correct")
 
-    def reduce(self, outcomes, unused_parameter):
+    def reduce(self, outcomes, subtasks_scores, parameter):
         """See ScoreTypeGroup."""
+        if subtasks_scores and "subtasks" in parameter:
+            for i in parameter["subtasks"]:
+                if subtasks_scores[i - 1] <= 0.0:
+                    return 0
+        if not outcomes:
+            return 0
         return min(outcomes)
+
+    def is_score_already_known(self, known_testcases_outcomes, known_subtasks_scores, parameter):
+        # Check, whether a subtask we depend on is failed.
+        if known_subtasks_scores and "subtasks" in parameter:
+            for i in parameter["subtasks"]:
+                if known_subtasks_scores[i - 1] <= 0.0:
+                    return True;
+        # If no dependent subtasks failed, check whether there are failed tests.
+        if not known_testcases_outcomes:
+            return False
+        if min(known_testcases_outcomes) <= 0.0:
+            return True
+        return False

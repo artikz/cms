@@ -72,6 +72,18 @@ class ScoreType(object):
         self.max_score, self.max_public_score, self.ranking_headers = \
             self.max_scores()
 
+    def export_to_dict(self):
+        res = {
+            'public_testcases': self.public_testcases,
+            'parameters': json.dumps(self.parameters)
+            }
+        return res
+
+    @classmethod
+    def import_from_dict(cls, name, data):
+        class_ = get_score_type_class(name)
+        return class_(data['parameters'], data['public_testcases'])
+
     def get_html_details(self, score_details, translator=None):
         """Return an HTML string representing the score details of a
         submission.
@@ -126,6 +138,12 @@ class ScoreType(object):
         """
         logger.error("Unimplemented method compute_score.")
         raise NotImplementedError("Please subclass this class.")
+
+    def should_evaluate_testcase(self, testcase_codename, known_outcomes):
+        return True
+
+    def get_testcases_to_skip(self, known_outcomes):
+        return []
 
 
 class ScoreTypeAlone(ScoreType):
@@ -251,6 +269,19 @@ class ScoreTypeGroup(ScoreTypeAlone):
         return ([[unicode]]): the list of the target testcases for each task.
 
         """
+        targets = []
+        indices = sorted(self.public_testcases.keys())
+        for st_idx, parameter in enumerate(self.parameters):
+            testcases = set()
+            for tc in parameter["testcases"]:
+                if isinstance(tc, int):
+                    testcases.add(indices[tc - 1])
+                else:
+                    for tc_idx in xrange(tc[0], tc[1] + 1):
+                        testcases.add(indices[tc_idx - 1])
+            targets.append(testcases)
+
+        return targets
 
         t_params = [p[1] for p in self.parameters]
 
@@ -317,12 +348,14 @@ class ScoreTypeGroup(ScoreTypeAlone):
         subtasks = []
         public_subtasks = []
         ranking_details = []
+        st_scores = []
 
         for st_idx, parameter in enumerate(self.parameters):
             target = targets[st_idx]
             st_score = self.reduce([float(evaluations[idx].outcome)
-                                    for idx in target],
+                                    for idx in target], st_scores,
                                    parameter) * parameter[0]
+            st_scores.append(st_score)
             st_public = all(self.public_testcases[idx] for idx in target)
             tc_outcomes = dict((
                 idx,
@@ -369,6 +402,34 @@ class ScoreTypeGroup(ScoreTypeAlone):
             public_score, json.dumps(public_subtasks), \
             json.dumps(ranking_details)
 
+    def should_evaluate_testcase(self, testcase_codename, known_outcomes):
+        if not known_outcomes:
+            return True
+
+        targets = self.retrieve_target_testcases()
+        st_scores = []
+        for st_idx, parameter in enumerate(self.parameters):
+            if testcase_codename in targets[st_idx]:
+                if not self.is_score_already_known([float(known_outcomes[x])
+                                                    for x in targets[st_idx]
+                                                    if x in known_outcomes],
+                                                   st_scores, parameter):
+                    return True
+            st_score = self.reduce([float(known_outcomes[x])
+                                    for x in targets[st_idx]
+                                    if x in known_outcomes], st_scores,
+                                   parameter) * parameter["points"]
+            st_scores.append(st_score)
+        return False
+
+    def get_testcases_to_skip(self, known_outcomes):
+        testcases_to_skip = []
+        for testcase_codename in sorted(self.public_testcases.keys()):
+            if testcase_codename not in known_outcomes:
+                if not self.should_evaluate_testcase(testcase_codename, known_outcomes):
+                    testcases_to_skip.append(testcase_codename)
+        return testcases_to_skip
+
     def get_public_outcome(self, unused_outcome, unused_parameter):
         """Return a public outcome from an outcome.
 
@@ -387,7 +448,7 @@ class ScoreTypeGroup(ScoreTypeAlone):
         logger.error("Unimplemented method get_public_outcome.")
         raise NotImplementedError("Please subclass this class.")
 
-    def reduce(self, unused_outcomes, unused_parameter):
+    def reduce(self, unused_outcomes, unused_subtasks_scores, unused_parameter):
         """Return the score of a subtask given the outcomes.
 
         unused_outcomes ([float]): the outcomes of the submission in

@@ -46,7 +46,7 @@ from sqlalchemy import func, not_
 from cms import ServiceCoord, get_service_shards
 from cms.io import Executor, TriggeredService, rpc_method
 from cms.db import SessionGen, Dataset, Submission, \
-    SubmissionResult, Task, UserTest
+    SubmissionResult, Task, UserTest, Evaluation
 from cms.service import get_datasets_to_judge, \
     get_submissions, get_submission_results
 from cms.grading.Job import Job
@@ -56,7 +56,7 @@ from .esoperations import ESOperation, get_relevant_operations, \
     submission_get_operations, submission_to_evaluate, \
     user_test_get_operations
 from .workerpool import WorkerPool
-
+from cms.grading.scoretypes import get_score_type
 
 logger = logging.getLogger(__name__)
 
@@ -480,6 +480,63 @@ class EvaluationService(TriggeredService):
         return super(EvaluationService, self).enqueue(
             operation, priority, timestamp) > 0
 
+    def get_skippable_testcases(self, dataset, submission_result):
+        known_outcomes = dict()
+        for evaluation in submission_result.evaluations:
+            known_outcomes[evaluation.testcase.codename] = \
+                evaluation.outcome
+
+        logger.info("outcomes: %s" % str(known_outcomes))
+        score_type = get_score_type(dataset=dataset)
+        return score_type.get_testcases_to_skip(known_outcomes)
+
+    def cancel_skippable_testcases_evaluations(self, dataset, submission_result):
+        """Check for testcases which can be skipped and
+           cancel corresponding operations.
+        """
+
+        testcases_to_skip = self.get_skippable_testcases(dataset, submission_result)
+        logger.info("skipping: %s" % str(testcases_to_skip))
+
+        for test_name in testcases_to_skip:
+            submission_result.evaluations += [Evaluation(
+                text='["Evaluation skipped because of previous fails"]',
+                outcome="0.0",
+                testcase=submission_result.dataset.testcases[test_name])]
+            operation = ESOperation(ESOperation.EVALUATION,
+                          submission_result.submission.id,
+                          dataset.id,
+                          test_name)
+            try:
+                self.dequeue(operation)
+            except KeyError:
+                pass  # Ok, the operation wasn't in the queue.
+            try:
+                self.get_executor().pool.ignore_operation(operation)
+            except LookupError:
+                pass  # Ok, the operation wasn't in the pool.
+
+    def lower_priority_of_skippable_testcases_evaluations(self, dataset, submission_result):
+        """Check for testcases which can be skipped and
+           lower priority of the corresponding operations.
+        """
+
+        testcases_to_skip = self.get_skippable_testcases(dataset, submission_result)
+        logger.info("rescheduling: %s" % str(testcases_to_skip))
+
+        for test_name in testcases_to_skip:
+            operation = ESOperation(ESOperation.EVALUATION,
+                          submission_result.submission.id,
+                          dataset.id,
+                          test_name)
+            try:
+                self.dequeue(operation)
+                self.enqueue(operation, PriorityQueue.PRIORITY_LOW,
+                    submission_result.submission.timestamp)
+            except KeyError:
+                pass  # Ok, the operation wasn't in the queue.
+
+
     @with_post_finish_lock
     def action_finished(self, data, plus, error=None):
         """Callback from a worker, to signal that is finished some
@@ -588,6 +645,15 @@ class EvaluationService(TriggeredService):
                     job.to_submission(submission_result)
                 else:
                     submission_result.evaluation_tries += 1
+
+                # Mark skippable testcases as skipped
+ 
+                self.cancel_skippable_testcases_evaluations(dataset,
+                    submission_result)
+                # self.lower_priority_of_skippable_testcases_evaluations(dataset,
+                #                                        submission_result)
+                #FIX: some ignorable testcase still can be evaluated
+                #because worker become free before we ignore evaluation jobs
 
                 # Submission evaluation will be ended only when
                 # evaluation for each testcase is available.
