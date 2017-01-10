@@ -124,6 +124,7 @@ class Config(object):
 
         # Installed or from source?
         self.installed = sys.argv[0].startswith("/usr/") and \
+            ".local" in sys.argv[0] and \
             sys.argv[0] != '/usr/bin/ipython' and \
             sys.argv[0] != '/usr/bin/python2' and \
             sys.argv[0] != '/usr/bin/python'
