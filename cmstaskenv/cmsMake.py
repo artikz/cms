@@ -3,7 +3,7 @@
 
 # Contest Management System - http://cms-dev.github.io/
 # Copyright © 2010-2014 Giovanni Mascellani <mascellani@poisson.phc.unipi.it>
-# Copyright © 2010-2015 Stefano Maggiolo <s.maggiolo@gmail.com>
+# Copyright © 2010-2017 Stefano Maggiolo <s.maggiolo@gmail.com>
 # Copyright © 2010-2012 Matteo Boscariol <boscarim@hotmail.com>
 # Copyright © 2013 Luca Wehrstedt <luca.wehrstedt@gmail.com>
 # Copyright © 2014-2015 Luca Versari <veluca93@gmail.com>
@@ -37,16 +37,16 @@ import tempfile
 import yaml
 import logging
 
-from cms import utf8_decoder, SOURCE_EXT_TO_LANGUAGE_MAP, \
-    LANGUAGE_TO_SOURCE_EXT_MAP, LANGUAGE_TO_HEADER_EXT_MAP
+from cms import utf8_decoder
 from cms.grading import get_compilation_commands
+from cms.grading.languagemanager import SOURCE_EXTS, get_language
 from cmstaskenv.Test import test_testcases, clean_test_env
 from cmscommon.terminal import move_cursor, add_color_to_string, \
     colors, directions
 
 SOL_DIRNAME = 'sol'
 SOL_FILENAME = 'soluzione'
-SOL_EXTS = SOURCE_EXT_TO_LANGUAGE_MAP.keys()
+SOL_EXTS = SOURCE_EXTS
 CHECK_DIRNAME = 'cor'
 CHECK_EXTS = SOL_EXTS
 TEXT_DIRNAME = 'testo'
@@ -226,13 +226,14 @@ def build_sols_list(base_dir, task_type, in_out_files, yaml_conf):
                                     os.path.join(tempdir, grader_name))
                     new_srcs.append(os.path.join(tempdir, grader_name))
                 # For now, we assume we only have one non-grader source.
-                source_name = task_name + LANGUAGE_TO_SOURCE_EXT_MAP[lang]
+                source_name = task_name + get_language(lang).source_extension
                 shutil.copyfile(os.path.join(base_dir, srcs[grader_num]),
                                 os.path.join(tempdir, source_name))
                 new_srcs.append(source_name)
                 # Libraries are needed/used only for C/C++ and Pascal
-                if lang in LANGUAGE_TO_HEADER_EXT_MAP:
-                    lib_template = "%s" + LANGUAGE_TO_HEADER_EXT_MAP[lang]
+                header_extension = get_language(lang).header_extension
+                if header_extension is not None:
+                    lib_template = "%s" + header_extension
                     lib_filename = lib_template % (task_name)
                     lib_path = os.path.join(
                         base_dir, SOL_DIRNAME, lib_filename)
